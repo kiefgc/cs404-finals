@@ -1,65 +1,78 @@
-import Image from "next/image";
+import Link from 'next/link';
+import GameCard from '@/components/gamecard';
+import ReviewCard from '@/components/reviewcard';
+import { LATEST_GAMES_MOCK, LATEST_REVIEWS_MOCK } from '@/lib/mockData';
 
 export default function Home() {
+  const featuredReview = LATEST_REVIEWS_MOCK[0];
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <div className="space-y-20 py-6">
+      
+      {/* 1. TOP ITEM: Hottest Review of the Week */}
+      <div className="relative bg-brand-surface border border-white/5 rounded p-8 md:p-12 overflow-hidden flex flex-col md:flex-row justify-between items-center gap-8 shadow-xl">
+        <div className="max-w-xl space-y-4">
+          <span className="text-[10px] uppercase font-bold text-brand-primary-button tracking-widest bg-brand-primary/20 px-2.5 py-1 rounded-sm border border-brand-primary/30">
+            Hottest Review of the Week
+          </span>
+          <h2 className="font-headline text-4xl md:text-5xl text-white font-bold leading-tight">
+            {featuredReview.review_title}
+          </h2>
+          <p className="text-gray-400 text-sm leading-relaxed font-light">
+            {featuredReview.body}
           </p>
+          <div className="pt-2">
+            <Link href={`/reviews/${featuredReview.review_id}`} className="text-xs uppercase font-bold tracking-widest text-brand-primary-light hover:text-white transition inline-flex items-center gap-1">
+              Read Full Critique <span>→</span>
+            </Link>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <div className="w-full md:w-80 aspect-video md:aspect-square bg-brand-bg rounded border border-white/5 flex items-center justify-center text-xs text-gray-600 font-mono shadow-inner">
+          [ Meccha Chameleon Image ]
         </div>
-      </main>
+      </div>
+
+      {/* 2. MIDDLE SECTION: Latest Critiques (3 Columns) */}
+      <div className="space-y-6">
+        <div className="flex justify-between items-baseline border-b border-white/5 pb-3">
+          <div>
+            <h3 className="font-headline text-2xl text-white font-bold">Latest Critiques</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Discerning perspectives on current releases.</p>
+          </div>
+          <Link href="/reviews" className="text-xs uppercase tracking-widest font-bold text-gray-400 hover:text-brand-primary-button transition">
+            View All
+          </Link>
+        </div>
+
+        {/* 3-Column Grid Layout for Critiques */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8">
+          {LATEST_REVIEWS_MOCK.map((review) => (
+            <ReviewCard key={review.review_id} review={review} />
+          ))}
+        </div>
+      </div>
+
+      {/* Latest Games Grid Layout Rows */}
+      <div className="space-y-6">
+        <div className="flex justify-between items-baseline border-b border-white/5 pb-3">
+          <div>
+            <h3 className="font-headline text-2xl text-white font-bold">Latest Games</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Essential restarts for the awakening player.</p>
+          </div>
+          <Link href="/games" className="text-xs uppercase tracking-widest font-bold text-gray-400 hover:text-brand-primary-button transition">
+            View All
+          </Link>
+        </div>
+
+        {/* 4-Column Grid Array mapping straight to cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-6">
+          {LATEST_GAMES_MOCK.map((game) => (
+            <GameCard key={game.game_id} game={game} />
+          ))}
+        </div>
+      </div>
+
     </div>
+
   );
 }
