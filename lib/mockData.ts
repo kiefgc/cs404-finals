@@ -159,6 +159,11 @@ export const GAMES: Game[] = [
   { game_id: 213, title: 'Mosaic Tides', release_date: '2022-07-19', rating_avg: 8.5, descript: 'An emotional city-builder where every district tells a different story.', genre_name: 'Strategy' },
   { game_id: 214, title: 'Vanta Reach', release_date: '2021-11-02', rating_avg: 9.1, descript: 'A cyberpunk survival odyssey about isolation, machines, and meaning.', genre_name: 'Survival' },
   { game_id: 215, title: 'The Hollow Garden', release_date: '2021-03-18', rating_avg: 8.0, descript: 'A meditative gardening sim that reframes seasons as emotional milestones.', genre_name: 'Simulation' },
+  { game_id: 216, title: "Eco", release_date: '2021-03-23', rating_avg: 7.5, descript: "A farming simulation with a focus on eco-friendly practices and community building.", genre_name: 'Simulation' },
+  { game_id: 217, title: 'Staxel', release_date: '2018-05-22', rating_avg: 8.2, descript: 'A voxel-based sandbox where you\'re the owner of a blocky farm.', genre_name: 'Simulation' },
+  { game_id: 218, title: 'Rune Factory 4 Special', release_date: '2020-02-25', rating_avg: 7.8, descript: "Action-RPG farming sim where you'll explore dungeons and build a life.", genre_name: 'Simulation' },
+  { game_id: 219, title: 'Harvest Moon: Light of Hope', release_date: '2017-11-07', rating_avg: 8.1, descript: "Restore your town, romance the locals, and rebuild your farm in this farming sim.", genre_name: 'Simulation' },
+  { game_id: 220, title: 'My Time at Portia', release_date: '2018-12-06', rating_avg: 7.9, descript: "Build your workshop, help customers, and explore dungeons in this blend of farming and crafting.", genre_name: 'Simulation' }
 ];
 
 export const REVIEWS: Review[] = [
