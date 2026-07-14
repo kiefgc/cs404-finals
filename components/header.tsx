@@ -18,6 +18,7 @@ export default function Header() {
             <Link href="/" className="hover:text-white transition text-white">Feed</Link>
             <Link href="/games" className="hover:text-white transition">Games</Link>
             <Link href="/journal" className="hover:text-white transition">Journal</Link>
+            <Link href="/admin" className="hover:text-white transition">Admin</Link>
           </nav>
         </div>
 
