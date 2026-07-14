@@ -2,9 +2,11 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import { GAMES } from '@/lib/mockData';
 
 export default function JournalPage() {
   const currentUserId = '1';
+  const [selectedGameId, setSelectedGameId] = useState<number>(GAMES[0]?.game_id ?? 0);
   const [thumbnail, setThumbnail] = useState('https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=1200&q=80');
   const [title, setTitle] = useState('The Architecture of Loneliness');
   const [description, setDescription] = useState('A reflective essay on how silence, pacing, and environmental design shape emotional resonance.');
@@ -35,6 +37,28 @@ export default function JournalPage() {
 
       <div className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
         <form className="space-y-6 rounded-3xl border border-white/10 bg-brand-surface p-6 shadow-xl">
+          <div className="space-y-2">
+            <label htmlFor="game" className="text-sm font-semibold uppercase tracking-[0.25em] text-gray-400">
+              Select Game
+            </label>
+            <select
+              id="game"
+              value={selectedGameId}
+              onChange={(event) => setSelectedGameId(Number(event.target.value))}
+              className="w-full rounded-2xl border border-white/10 bg-brand-bg px-4 py-3 text-sm text-white outline-none transition focus:border-brand-primary"
+            >
+              <option value={0} disabled>
+                Choose a game from the database
+              </option>
+              {GAMES.map((game) => (
+                <option key={game.game_id} value={game.game_id}>
+                  {game.title}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500">Only games already available in the database can be selected.</p>
+          </div>
+
           <div className="space-y-2">
             <label htmlFor="thumbnail" className="text-sm font-semibold uppercase tracking-[0.25em] text-gray-400">
               Thumbnail image
