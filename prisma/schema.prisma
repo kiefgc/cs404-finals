@@ -1,0 +1,128 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Role {
+  id    Int    @id @default(autoincrement())
+  name  String @unique // e.g., "USER", "ADMIN"
+  users User[]
+
+  @@map("roles")
+}
+
+model User {
+  id           Int         @id @default(autoincrement())
+  supabase_id  String      @unique
+  name         String
+  handle       String      @unique @default("")
+  email        String      @unique
+  password     String?     // Nullable to support social logins/OAuth safely
+  bio          String?     @db.Text
+  profile_pic  String?
+  location     String      @default("")
+  role_id      Int
+  created_at   DateTime    @default(now())
+
+  role         Role        @relation(fields: [role_id], references: [id])
+  reviews      Review[]
+  likes        Like[]
+  saved_games  SavedGame[] 
+  
+  // Self-referential relations for social system
+  following    Follow[]    @relation("UserFollowing")
+  followers    Follow[]    @relation("UserFollowers")
+
+  @@map("users")
+}
+
+model Follow {
+  id           Int  @id @default(autoincrement())
+  following_id Int
+  follower_id  Int
+
+  following    User @relation("UserFollowing", fields: [following_id], references: [id], onDelete: Cascade)
+  follower     User @relation("UserFollowers", fields: [follower_id], references: [id], onDelete: Cascade)
+
+  @@unique([following_id, follower_id])
+  @@map("follows")
+}
+
+model Game {
+  id           Int         @id @default(autoincrement())
+  title        String
+  release_date DateTime
+  cover_image  String?
+  description  String      @db.Text
+  rating_avg   Float       @default(0.0)
+  created_at   DateTime    @default(now())
+
+  reviews      Review[]
+  game_genres  GameGenre[]
+  saved_by     SavedGame[]
+
+  @@map("games")
+}
+
+model Genre {
+  id          Int         @id @default(autoincrement())
+  name        String      @unique
+  game_genres GameGenre[]
+
+  @@map("genres")
+}
+
+model GameGenre {
+  game_id  Int
+  genre_id Int
+
+  game     Game  @relation(fields: [game_id], references: [id], onDelete: Cascade)
+  genre    Genre @relation(fields: [genre_id], references: [id], onDelete: Cascade)
+
+  @@id([game_id, genre_id])
+  @@map("game_genres")
+}
+
+model SavedGame {
+  user_id Int
+  game_id Int
+
+  user    User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  game    Game @relation(fields: [game_id], references: [id], onDelete: Cascade)
+
+  @@id([user_id, game_id])
+  @@map("saved_games")
+}
+
+model Review {
+  id           Int      @id @default(autoincrement())
+  game_id      Int
+  user_id      Int
+  title        String   // Serves as review_title
+  body         String   @db.Text
+  rating       Int
+  recommended  Boolean  @default(true)
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+  is_archived  Boolean  @default(false)
+  
+  game         Game     @relation(fields: [game_id], references: [id], onDelete: Cascade)
+  user         User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  likes        Like[]
+
+  @@map("reviews")
+}
+
+model Like {
+  user_id   Int
+  review_id Int
+
+  user      User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  review    Review @relation(fields: [review_id], references: [id], onDelete: Cascade)
+
+  @@id([user_id, review_id])
+  @@map("likes")
+}
