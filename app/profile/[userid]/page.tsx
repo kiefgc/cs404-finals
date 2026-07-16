@@ -1,13 +1,126 @@
 import Link from 'next/link';
+import { notFound } from 'next/navigation';
 import GameCard from '@/components/gamecard';
 import ReviewCard from '@/components/reviewcard';
-import { getUserById, getUserLikedGames, getReviewsByUserId } from '@/lib/mockData';
+import { prisma } from '@/lib/prisma';
+import { Game, Review } from '@/types';
 
-export default async function ProfilePage({ params }: { params: Promise<{ userid: string }> }) {
+export const revalidate = 0;
+
+interface ProfilePageProps {
+  params: Promise<{ userid: string }>;
+}
+
+async function getProfileData(userIdStr: string) {
+  const userId = parseInt(userIdStr, 10);
+  if (isNaN(userId)) return null;
+
+  // 1. Fetch user, metadata counts, and Role in one step
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: {
+      role: true, // Pulls the role name (e.g. "USER", "ADMIN")
+      _count: {
+        select: {
+          saved_games: true, // Matches your SavedGame model relation
+          reviews: { where: { is_archived: false } },
+          followers: true,  // Matches your Follow model relation
+        },
+      },
+    },
+  });
+
+  if (!user) return null;
+
+  // 2. Fetch top 4 saved games
+  const dbSavedGames = await prisma.savedGame.findMany({
+    where: { user_id: userId },
+    take: 4,
+    orderBy: {
+      // Sort by the primary keys since there is no separate created_at on SavedGame
+      game_id: 'desc',
+    },
+    include: {
+      game: {
+        include: {
+          game_genres: {
+            include: {
+              genre: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  // Map to unified Game structure
+  const profileGames: Game[] = dbSavedGames.map((sg) => {
+    const primaryGenre = sg.game.game_genres[0]?.genre?.name || '';
+    return {
+      game_id: sg.game.id,
+      title: sg.game.title,
+      release_date: sg.game.release_date.toISOString(),
+      cover_image: sg.game.cover_image || null,
+      description: sg.game.description,
+      rating_avg: sg.game.rating_avg,
+      genre_name: primaryGenre,
+    };
+  });
+
+  // 3. Fetch top 3 reviews
+  const dbReviews = await prisma.review.findMany({
+    where: { 
+      user_id: userId,
+      is_archived: false,
+    },
+    take: 3,
+    orderBy: { created_at: 'desc' },
+    include: {
+      game: true,
+    },
+  });
+
+  // Map to unified Review structure
+  const profileReviews: Review[] = dbReviews.map((review) => ({
+    review_id: review.id,
+    game_title: review.game.title,
+    review_title: review.title,
+    body: review.body,
+    rating: review.rating,
+    recommended: review.recommended,
+    date_created: review.created_at.toISOString(),
+  }));
+
+  return {
+    profileUser: {
+      user_id: user.id,
+      name: user.name,
+      role: user.role.name, // Extracted from Role model
+      bio: user.bio || 'This player has not set up a bio yet.',
+      gamesCount: user._count.saved_games,
+      reviewsCount: user._count.reviews,
+      followersCount: user._count.followers,
+    },
+    profileGames,
+    profileReviews,
+  };
+}
+
+export default async function ProfilePage({ params }: ProfilePageProps) {
   const { userid } = await params;
-  const profileUser = getUserById(userid);
-  const profileGames = getUserLikedGames(userid);
-  const profileReviews = getReviewsByUserId(profileUser.user_id ?? 1, 3);
+  const data = await getProfileData(userid);
+
+  if (!data) notFound();
+
+  const { profileUser, profileGames, profileReviews } = data;
+
+  // Dynamically grab initials
+  const initials = profileUser.name
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .substring(0, 2)
+    .toUpperCase() || 'PV';
 
   return (
     <div className="space-y-12 py-6">
@@ -16,7 +129,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ userid
             <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
               <div className="flex items-center gap-5">
                 <div className="flex h-28 w-28 items-center justify-center rounded-3xl bg-brand-tertiary border border-white/10 text-4xl font-bold text-brand-primary-button">
-                  JV
+                  {initials}
                 </div>
                 <div className="space-y-2">
                   <h1 className="font-headline text-4xl text-white font-bold tracking-tight">{profileUser.name}</h1>
@@ -45,7 +158,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ userid
               </div>
               <div className="rounded-3xl border border-white/10 bg-brand-bg/70 p-6">
                 <p className="text-xs uppercase tracking-[0.3em] text-gray-500">Followers</p>
-                <p className="mt-4 text-3xl font-bold text-white">{profileUser.followersCount?.toLocaleString()}</p>
+                <p className="mt-4 text-3xl font-bold text-white">{profileUser.followersCount.toLocaleString()}</p>
               </div>
             </div>
 
@@ -55,6 +168,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ userid
         </div>
       </section>
 
+      {/* Favorite Games Section */}
       <section className="space-y-6">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
@@ -66,13 +180,20 @@ export default async function ProfilePage({ params }: { params: Promise<{ userid
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
-          {profileGames.map((game) => (
-            <GameCard key={game.game_id} game={game} />
-          ))}
-        </div>
+        {profileGames.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
+            {profileGames.map((game) => (
+              <GameCard key={game.game_id} game={game} />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-12 bg-brand-surface/50 rounded-3xl border border-white/5 text-gray-500 text-sm">
+            This library is empty. Liked games will appear here.
+          </div>
+        )}
       </section>
 
+      {/* Recent Reviews Section */}
       <section className="space-y-6">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
@@ -84,11 +205,17 @@ export default async function ProfilePage({ params }: { params: Promise<{ userid
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {profileReviews.map((review) => (
-            <ReviewCard key={review.review_id} review={review} />
-          ))}
-        </div>
+        {profileReviews.length > 0 ? (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {profileReviews.map((review) => (
+              <ReviewCard key={review.review_id} review={review} />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-12 bg-brand-surface/50 rounded-3xl border border-white/5 text-gray-500 text-sm">
+            No critiques published yet.
+          </div>
+        )}
       </section>
     </div>
   );
