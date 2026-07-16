@@ -1,25 +1,19 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
-import SaveGameButton from '@/components/save-game-button';
-import LikeReviewButton from '@/components/like-review-button';
 
-// Force dynamic rendering so updates reflect immediately
-export const revalidate = 0;
+export const revalidate = 0; // Ensure data stays fresh
 
-interface PageProps {
+interface GamePageProps {
   params: Promise<{ gameid: string }>;
 }
 
-async function getGameDetails(gameId: string) {
-  // Convert URL string parameter to an integer safely to avoid Prisma ValidationError
-  const numericId = parseInt(gameId, 10);
-  if (isNaN(numericId)) {
-    return null;
-  }
+async function getGameDetails(gameIdStr: string) {
+  const gameId = parseInt(gameIdStr, 10);
+  if (isNaN(gameId)) return null;
 
   const game = await prisma.game.findUnique({
-    where: { id: numericId },
+    where: { id: gameId },
     include: {
       game_genres: {
         include: {
@@ -30,170 +24,201 @@ async function getGameDetails(gameId: string) {
         where: { is_archived: false },
         orderBy: { created_at: 'desc' },
         include: {
-          user: true, 
+          user: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          _count: {
+            select: {
+              likes: true,
+            },
+          },
         },
       },
     },
   });
 
-  return game;
+  if (!game) return null;
+
+  // Defensive scale logic: If raw rating is <= 5, scale it to 10. Otherwise, preserve its scale.
+  const displayRating = game.rating_avg <= 5 
+    ? (game.rating_avg * 2).toFixed(1) 
+    : game.rating_avg.toFixed(1);
+
+  return {
+    id: game.id,
+    title: game.title,
+    description: game.description,
+    cover_image: game.cover_image,
+    rating_avg: displayRating,
+    release_date: game.release_date.toLocaleDateString('en-US', {
+      month: 'short',
+      year: 'numeric',
+    }),
+    genres: game.game_genres.map((gg) => gg.genre.name),
+    reviews: game.reviews.map((review) => {
+      const diffTime = Math.abs(new Date().getTime() - review.created_at.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      let relativeTime = `${diffDays} days ago`;
+      if (diffDays === 1) relativeTime = "Yesterday";
+      if (diffDays > 7) relativeTime = `${Math.floor(diffDays / 7)} weeks ago`;
+
+      return {
+        id: review.id,
+        title: review.title,
+        body: review.body,
+        rating: review.rating,
+        recommended: review.recommended,
+        posted_ago: relativeTime.toUpperCase(),
+        user: {
+          id: review.user.id,
+          name: review.user.name,
+        },
+        likes_count: review._count.likes,
+      };
+    }),
+  };
 }
 
-export default async function GameDetailsPage({ params }: PageProps) {
+export default async function GameDetailPage({ params }: GamePageProps) {
   const { gameid } = await params;
   const game = await getGameDetails(gameid);
 
-  if (!game) {
-    notFound();
-  }
-
-  const formattedDate = game.release_date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-  const genreName = game.game_genres[0]?.genre?.name || 'Uncategorized';
-
-  // Fallback array of images related to the game.
-  // In a production setup, you can save these in a "pictures" column/table in your DB,
-  // but for now, we'll fall back to the main cover image or a few themed fallbacks.
-  const galleryImages = [
-    game.cover_image,
-    // Add additional image fields from your database schema here if you have them!
-  ].filter(Boolean) as string[];
+  if (!game) notFound();
 
   return (
-    <div className="space-y-16 py-4">
-
-      {/* 1. HERO HEADER BANNER */}
-      <div className="relative min-h-[450px] bg-brand-surface border border-white/5 rounded-lg overflow-hidden flex items-end p-8 md:p-12 shadow-2xl">
-        {game.cover_image ? (
-          /* Using standard HTML <img> to avoid Next.js width/height requirement headaches */
-          <img 
-            src={game.cover_image} 
-            alt={`${game.title} cover`}
-            className="absolute inset-0 w-full h-full object-cover opacity-40 scale-105 filter blur-[2px]"
+    <div className="min-h-screen bg-brand-bg text-white">
+      {/* 1. Hero Container Section with safely positioned absolute background */}
+      <section className="relative overflow-hidden rounded-3xl border border-white/5 bg-brand-surface/40">
+        {/* Background Image Block - Increased opacity to 70% for much better visibility */}
+        <div className="absolute inset-0 z-0">
+          <img
+            src={game.cover_image}
+            alt={`${game.title} backdrop`}
+            className="h-full w-full object-cover object-top opacity-70 transition-opacity duration-300"
           />
-        ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-brand-tertiary/10 to-brand-surface opacity-60" />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-brand-bg via-brand-bg/85 to-transparent z-10" />
+          {/* Adjusted gradients: Balanced fade-to-black so the artwork details are preserved */}
+          <div className="absolute inset-0 bg-gradient-to-t from-brand-bg via-brand-bg/40 to-black/15" />
+          <div className="absolute inset-0 bg-gradient-to-r from-brand-bg/80 via-transparent to-transparent" />
+        </div>
 
-        <div className="relative z-20 flex flex-col md:flex-row justify-between items-start md:items-end w-full gap-6">
-          <div className="max-w-2xl space-y-3">
-            <div className="flex items-center gap-3">
-              <span className="text-[10px] uppercase font-bold tracking-widest text-brand-primary-button">
-                {genreName}
-              </span>
-              <span className="text-[10px] text-gray-500">•</span>
-              <span className="text-[10px] uppercase font-bold tracking-widest text-gray-400">
-                {formattedDate}
-              </span>
-            </div>
-            <h1 className="font-headline text-4xl md:text-6xl text-white font-bold leading-none">
-              {game.title}
-            </h1>
-            <p className="text-gray-300 text-sm md:text-base leading-relaxed font-light line-clamp-3">
-              {game.description}
-            </p>
-          </div>
+        {/* Hero Content (Restricted inside bounds safely above background) */}
+        <div className="relative z-10 mx-auto max-w-7xl px-6 py-12 md:px-12 md:py-20">
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-3 lg:items-end">
+            
+            {/* Left Column: Context Metadata & Info */}
+            <div className="lg:col-span-2 space-y-5">
+              <div className="flex flex-wrap items-center gap-3 text-xs font-semibold tracking-widest text-gray-400">
+                <span className="text-gray-300">RELEASED {game.release_date.toUpperCase()}</span>
+                {game.genres.map((genre) => (
+                  <span key={genre} className="text-brand-primary-button/90">
+                    · {genre.toUpperCase()}
+                  </span>
+                ))}
+              </div>
 
-          <div className="flex md:flex-col items-center md:items-end justify-between w-full md:w-auto gap-4 pt-4 md:pt-0 border-t border-white/5 md:border-none z-30">
-            <div className="bg-brand-bg/80 border border-white/10 px-4 py-3 rounded backdrop-blur-sm text-center shadow-lg min-w-[100px]">
-              <div className="text-2xl md:text-4xl font-mono font-bold text-brand-primary-button">
-                {game.rating_avg.toFixed(1)}
-              </div>
-              <div className="text-[9px] uppercase tracking-wider font-bold text-gray-500 mt-0.5">
-                Community
-              </div>
+              <h1 className="font-serif text-4xl font-bold leading-tight tracking-tight text-white sm:text-5xl lg:text-6xl drop-shadow-[0_4px_12px_rgba(0,0,0,0.5)]">
+                {game.title}
+              </h1>
+
+              <p className="max-w-2xl text-sm leading-relaxed text-gray-200 md:text-base drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)]">
+                {game.description}
+              </p>
             </div>
-            <SaveGameButton gameId={gameid} initialSaved={false} />
+
+            {/* Right Column: Score Box & CTA Button */}
+            <div className="flex flex-row items-center gap-4 justify-start lg:flex-col lg:items-end lg:justify-end">
+              {/* Score Badge */}
+              <div className="flex h-20 w-20 flex-col items-center justify-center border border-white/10 bg-black/85 p-3 text-center rounded shadow-2xl">
+                <span className="text-2xl font-bold text-[#96c2a6]">{game.rating_avg}</span>
+                <span className="text-[8px] mt-1 font-semibold uppercase tracking-widest text-gray-400 animate-pulse">QuestLog Score</span>
+              </div>
+
+              {/* Action Button */}
+              <button className="w-full max-w-[170px] rounded bg-[#a8cca4] py-3 text-center text-xs font-bold uppercase tracking-widest text-brand-bg transition duration-200 hover:bg-[#bce0b8] hover:shadow-lg hover:shadow-emerald-950/20">
+                Add to Library
+              </button>
+            </div>
+
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* 2. REVIEWS CONSENSUS FEED */}
-      <div className="space-y-6">
-        <div className="flex justify-between items-baseline border-b border-white/5 pb-3">
+      {/* 2. Community Consensus / Reviews Grid */}
+      <section className="mx-auto max-w-7xl py-16 space-y-8">
+        <div className="flex items-end justify-between border-b border-white/10 pb-5">
           <div>
-            <h2 className="font-headline text-2xl text-white font-bold">Community Consensus</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Top rated reviews from the founding community.</p>
+            <h2 className="font-serif text-3xl font-semibold text-white">Community Consensus</h2>
+            <p className="mt-1 text-sm text-gray-500">Top-rated reviews from the QuestLog community.</p>
           </div>
-          <Link href={`/reviews`} className="text-xs uppercase tracking-widest font-bold text-gray-400 hover:text-brand-primary-button transition">
+          <Link
+            href="/reviews"
+            className="border border-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-emerald-400 hover:bg-white/5 transition"
+          >
             Read All Reviews
           </Link>
         </div>
 
-        {game.reviews.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {game.reviews.map((rev) => (
-              <div key={rev.id} className="bg-brand-surface border border-white/5 rounded p-6 flex flex-col justify-between space-y-4 shadow-md hover:border-brand-primary-button/20 transition">
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center text-xs">
-                    <div className="flex items-center gap-2">
-                      <div className="w-5 h-5 rounded-full bg-brand-secondary flex items-center justify-center text-[10px] font-bold text-white uppercase">
-                        {rev.user?.username ? rev.user.username[0] : 'U'}
+        {/* Review Cards Grid */}
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          {game.reviews.length > 0 ? (
+            game.reviews.map((review) => (
+              <article
+                key={review.id}
+                className="flex flex-col justify-between rounded border border-white/5 bg-brand-surface p-6 shadow-xl"
+              >
+                <div className="space-y-4">
+                  {/* User Profile Info & Score badge */}
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded bg-brand-secondary text-sm font-semibold uppercase text-white">
+                        {review.user.name.charAt(0)}
                       </div>
-                      <span className="font-bold text-gray-300">
-                        {rev.user?.username || 'Anonymous User'}
-                      </span>
+                      <div>
+                        <Link
+                          href={`/profile/${review.user.id}`}
+                          className="text-sm font-semibold text-white hover:text-brand-primary-button transition"
+                        >
+                          {review.user.name}
+                        </Link>
+                        {/* Interactive Dynamic Star Rating system */}
+                        <div className="flex text-xs text-[#a8cca4] mt-0.5">
+                          {"★".repeat(Math.max(0, Math.min(5, review.rating)))}
+                          {"☆".repeat(Math.max(0, 5 - Math.min(5, review.rating)))}
+                        </div>
+                      </div>
                     </div>
-                    <div className={`text-xs font-bold uppercase tracking-wider ${rev.recommended ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {rev.recommended ? '★ Recommend' : '✕ Avoid'}
+
+                    {/* Upvote/Helpful Badge */}
+                    <div className="flex items-center gap-1 rounded bg-[#a8cca4]/10 px-2 py-1 text-xs text-[#a8cca4]">
+                      <span>👍</span>
+                      <span>{review.likes_count.toLocaleString()}</span>
                     </div>
                   </div>
-                  <h4 className="text-white text-sm font-semibold leading-tight">{rev.title}</h4>
-                  <p className="text-gray-400 text-xs leading-relaxed font-light italic">
-                    &ldquo;{rev.body}&rdquo;
-                  </p>
+
+                  {/* Review Text Block */}
+                  <div className="space-y-2 pt-2">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-400">{review.title}</p>
+                    <p className="font-serif italic text-sm leading-relaxed text-gray-300 line-clamp-4">
+                      "{review.body}"
+                    </p>
+                  </div>
                 </div>
 
-                <div className="flex justify-between items-center text-[10px] font-bold tracking-wider text-gray-600 uppercase border-t border-white/5 pt-3">
-                  <span>
-                    {rev.created_at.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                  </span>
-                  <LikeReviewButton reviewId={rev.id} initialLikes={rev.likes_count} />
+                <div className="mt-6 border-t border-white/5 pt-4 text-[9px] tracking-widest text-gray-500">
+                  POSTED {review.posted_ago}
                 </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-12 text-gray-500 text-sm bg-brand-surface rounded border border-white/5">
-            No reviews have been published for this game yet.
-          </div>
-        )}
-      </div>
-
-      {/* 3. SIMPLIFIED GALLERY */}
-      <div className="space-y-6">
-        <div className="border-b border-white/5 pb-3">
-          <h2 className="font-headline text-2xl text-white font-bold">Visual Dossier</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Official snapshots for this title.</p>
+              </article>
+            ))
+          ) : (
+            <div className="col-span-2 rounded border border-dashed border-white/10 p-12 text-center text-sm text-gray-500">
+              No reviews have been written for this game yet.
+            </div>
+          )}
         </div>
-
-        {galleryImages.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-            {galleryImages.map((src, idx) => (
-              <div 
-                key={idx} 
-                className="overflow-hidden rounded border border-white/5 shadow-md aspect-video relative group bg-brand-surface"
-              >
-                {/* Standard HTML img tags ignore Next.js strict width checks—making them completely safe and bulletproof */}
-                <img 
-                  src={src} 
-                  alt={`${game.title} gallery screenshot ${idx + 1}`} 
-                  className="w-full h-full object-cover transition duration-300 group-hover:scale-105"
-                />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-12 text-gray-500 text-sm bg-brand-surface rounded border border-white/5">
-            No pictures registered for this visual dossier.
-          </div>
-        )}
-      </div>
-
+      </section>
     </div>
   );
 }

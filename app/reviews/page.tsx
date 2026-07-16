@@ -14,126 +14,178 @@ async function getRecentReviews() {
       created_at: 'desc',
     },
     include: {
-      user: true,
-      game: true, // Pulls the game title automatically!
+      user: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      game: {
+        select: {
+          id: true,
+          title: true,
+        },
+      },
+      _count: {
+        select: {
+          likes: true,
+        },
+      },
     },
   });
 
-  return reviews;
+  return reviews.map((review) => ({
+    id: review.id,
+    title: review.title,
+    body: review.body,
+    rating: review.rating,
+    recommended: review.recommended,
+    created_at: review.created_at,
+    likes_count: review._count.likes,
+    user: {
+      id: review.user.id,
+      name: review.user.name,
+    },
+    game: {
+      id: review.game.id,
+      title: review.game.title,
+    },
+  }));
 }
 
 export default async function ReviewsPage() {
   const reviews = await getRecentReviews();
 
   return (
-    <div className="space-y-10 py-8">
-      {/* HEADER SECTION */}
-      <header className="rounded-3xl border border-white/10 bg-brand-surface p-8 shadow-2xl">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-3xl">
-            <p className="text-xs uppercase tracking-[0.3em] text-gray-500">Community Feed</p>
-            <h1 className="mt-3 text-4xl font-headline text-white font-bold sm:text-5xl">
-              Most recent reviews
+    <div className="min-h-screen bg-brand-bg text-white py-12 px-4 md:px-8">
+      <div className="mx-auto max-w-5xl space-y-12">
+        
+        {/* 1. EDITORIAL HEADER SECTION */}
+        <header className="border-b border-white/10 pb-8 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+          <div className="max-w-2xl space-y-2">
+            <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#96c2a6]">
+              Community Feed
+            </span>
+            <h1 className="font-serif text-4xl font-bold leading-none tracking-tight text-white sm:text-5xl">
+              The Consensus
             </h1>
-            <p className="mt-4 max-w-2xl text-sm leading-7 text-gray-400 sm:text-base">
-              Scroll through the latest community takes in a continuous feed. Each review is pulled dynamically from the database, complete with game titles, ratings, and authors.
+            <p className="text-sm leading-relaxed text-gray-400">
+              A chronological ledger of critical reviews written by the QuestLog collective.
             </p>
           </div>
-          <div className="flex flex-wrap gap-3">
+          <div>
             <Link 
               href="/" 
-              className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-brand-primary-button transition hover:bg-white/10"
+              className="inline-flex items-center justify-center rounded-sm border border-white/10 bg-white/5 px-5 py-2.5 text-[10px] font-bold uppercase tracking-widest text-white transition hover:bg-white/10"
             >
-              Back to home
+              Back to Home
             </Link>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* REVIEWS FEED */}
-      <div className="space-y-6">
-        {reviews.length > 0 ? (
-          reviews.map((review) => {
-            const formattedDate = review.created_at.toLocaleDateString('en-US', {
-              month: 'short',
-              day: 'numeric',
-              year: 'numeric'
-            });
+        {/* 2. REVIEWS FEED COLUMN */}
+        <div className="space-y-8">
+          {reviews.length > 0 ? (
+            reviews.map((review) => {
+              const formattedDate = review.created_at.toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric'
+              }).toUpperCase();
 
-            return (
-              <article 
-                key={review.id} 
-                className="rounded-3xl border border-white/10 bg-brand-surface shadow-xl transition hover:-translate-y-1 hover:shadow-2xl"
-              >
-                <div className="flex flex-col gap-4 p-5 sm:p-6">
-                  
-                  {/* REVIEW HEADER */}
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-secondary text-sm font-semibold uppercase text-white">
-                        {review.user?.username ? review.user.username.charAt(0) : 'U'}
+              return (
+                <article 
+                  key={review.id} 
+                  className="group rounded-sm border border-white/5 bg-brand-surface p-6 md:p-8 shadow-xl transition-all duration-200 hover:border-white/10"
+                >
+                  <div className="flex flex-col gap-6">
+                    
+                    {/* REVIEW METADATA HEADER */}
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-center gap-4">
+                        {/* Square Avatar matches our Game Details aesthetic */}
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-sm bg-brand-secondary text-sm font-semibold uppercase text-white">
+                          {review.user?.name ? review.user.name.charAt(0) : 'U'}
+                        </div>
+                        <div>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                            <span className="text-sm font-semibold text-white">
+                              {review.user?.name || 'Anonymous Critic'}
+                            </span>
+                            <span className="text-gray-600 text-xs hidden sm:inline">|</span>
+                            <Link 
+                              href={`/games/${review.game?.id}`}
+                              className="text-xs font-bold uppercase tracking-wider text-[#96c2a6] hover:text-[#bce0b8] transition"
+                            >
+                              {review.game?.title || 'Unknown Title'}
+                            </Link>
+                          </div>
+                          
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-[10px] tracking-wider text-gray-500 font-semibold">
+                              {formattedDate}
+                            </span>
+                            <span className="text-gray-700">·</span>
+                            {/* Star Rating system directly aligned with the database field */}
+                            <div className="flex text-xs text-[#a8cca4]">
+                              {"★".repeat(Math.max(0, Math.min(5, review.rating)))}
+                              {"☆".repeat(Math.max(0, 5 - Math.min(5, review.rating)))}
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-semibold text-white">
-                          {review.user?.username || 'Anonymous Critic'}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {formattedDate} · <span className="text-brand-primary-button font-medium">{review.game?.title || 'Unknown Title'}</span>
-                        </p>
+
+                      {/* Clean recommendation stamp */}
+                      <div className={`rounded-sm px-3 py-1 text-[10px] font-bold uppercase tracking-widest border ${
+                        review.recommended 
+                          ? 'bg-emerald-500/5 text-emerald-400 border-emerald-500/20' 
+                          : 'bg-red-500/5 text-red-400 border-red-500/20'
+                      }`}>
+                        {review.recommended ? 'Recommended' : 'Avoid'}
                       </div>
                     </div>
-                    <div className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] ${
-                      review.recommended ? 'bg-emerald-500/10 text-emerald-300' : 'bg-red-500/10 text-red-300'
-                    }`}>
-                      {review.recommended ? 'Recommended' : 'Avoid'}
-                    </div>
-                  </div>
 
-                  {/* REVIEW BODY BOX */}
-                  <div className="overflow-hidden rounded-3xl bg-gradient-to-br from-brand-tertiary/10 via-brand-bg/70 to-brand-bg p-5 text-white shadow-inner">
-                    <div className="space-y-4">
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.3em] text-gray-400">Review</p>
-                        <h2 className="mt-2 text-2xl font-semibold leading-tight text-white">
-                          {review.title}
-                        </h2>
-                      </div>
-                      <p className="text-sm leading-relaxed text-gray-300 line-clamp-4">
+                    {/* EDITORIAL CRITIQUE BODY */}
+                    <div className="space-y-3 pl-0 md:pl-[60px]">
+                      <h2 className="font-serif text-2xl font-semibold leading-tight text-white group-hover:text-emerald-300 transition duration-150">
+                        "{review.title}"
+                      </h2>
+                      <p className="font-serif italic text-sm leading-relaxed text-gray-300 opacity-90 line-clamp-4">
                         {review.body}
                       </p>
                     </div>
-                  </div>
 
-                  {/* ACTIONS & SOCIAL STRIP */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-4 text-sm text-gray-400">
-                    <div className="flex items-center gap-4 text-xs uppercase tracking-[0.3em] text-gray-500">
-                      {/* Interactive Like Component we built earlier */}
-                      <LikeReviewButton 
-                        reviewId={review.id} 
-                        initialLikes={review.likes_count} 
-                      />
-                      <span>{review.game?.title}</span>
+                    {/* INTERACTIVE ACTIONS STRIP */}
+                    <div className="flex items-center justify-between border-t border-white/5 pt-5 pl-0 md:pl-[60px] text-xs text-gray-400">
+                      <div className="flex items-center gap-6">
+                        {/* Compact customizable like action */}
+                        <LikeReviewButton 
+                          reviewId={review.id} 
+                          initialLikes={review.likes_count} 
+                        />
+                      </div>
+                      
+                      <div>
+                        <Link 
+                          href={`/reviews/${review.id}`} 
+                          className="inline-flex items-center justify-center rounded-sm border border-white/10 bg-white/5 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-white hover:bg-white/10 transition"
+                        >
+                          Read Critique
+                        </Link>
+                      </div>
                     </div>
-                    
-                    <div className="flex flex-wrap gap-2">
-                      <Link 
-                        href={`/reviews/${review.id}`} 
-                        className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-brand-primary-button transition hover:bg-white/10"
-                      >
-                        View full post
-                      </Link>
-                    </div>
-                  </div>
 
-                </div>
-              </article>
-            );
-          })
-        ) : (
-          <div className="text-center py-16 text-gray-500 text-sm bg-brand-surface rounded-3xl border border-white/10">
-            There are no community reviews written yet. Be the first to add one!
-          </div>
-        )}
+                  </div>
+                </article>
+              );
+            })
+          ) : (
+            <div className="text-center py-20 text-gray-500 text-sm bg-brand-surface rounded-sm border border-dashed border-white/10">
+              There are no community reviews written yet. Be the first to add one!
+            </div>
+          )}
+        </div>
+        
       </div>
     </div>
   );
