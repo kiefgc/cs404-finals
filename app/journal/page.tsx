@@ -2,323 +2,256 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState, FormEvent, useEffect } from 'react';
-
-// Adjusted interface to use standard 'id' based on database schemas
-interface Game {
-  id: number | string;
-  title: string;
-}
+import { useState, FormEvent } from 'react';
+import { ALL_GAMES } from '@/lib/mockData';
 
 export default function JournalPage() {
   const router = useRouter();
-  
-  // State management
-  const [games, setGames] = useState<Game[]>([]); 
+  const [thumbnail, setThumbnail] = useState('https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=1200&q=80');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [content, setContent] = useState('');
   const [recommended, setRecommended] = useState(true);
-  const [gameId, setGameId] = useState<string | number>(''); 
-  const [rating, setRating] = useState(1); // Matches your starting visual rating of 1/10
-  
-  // Dynamic user-submitted image field
-  const [thumbnail, setThumbnail] = useState('https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=1200&q=80');
-  
+  const [gameId, setGameId] = useState(201);
+  const [rating, setRating] = useState(5);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [fetchingGames, setFetchingGames] = useState(true);
 
-  // Fetch live games list on mount
-  useEffect(() => {
-    async function fetchGames() {
-      try {
-        const res = await fetch('/api/games?limit=50&sort=title&order=asc');
-        if (!res.ok) throw new Error('Could not retrieve games database.');
-        
-        const data = await res.json();
-        const gamesList = data.games || [];
-        
-        setGames(gamesList);
-        if (gamesList.length > 0) {
-          // Use 'id' dynamically from the database
-          const firstGameId = gamesList[0].id || gamesList[0].game_id;
-          if (firstGameId) setGameId(firstGameId);
-        }
-      } catch (err: any) {
-        setError(err.message || 'Failed to fetch games list.');
-      } finally {
-        setFetchingGames(false);
-      }
-    }
-    fetchGames();
-  }, []);
-
-  // Find currently selected game to display the tag inside the live preview card
-  const selectedGame = games.find(g => (g.id === gameId || (g as any).game_id === gameId));
-
-  // Handle Form Submission
-  const handleSubmit = async (e: FormEvent) => {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!gameId) {
-      setError('Please select a game.');
+    setError('');
+    setLoading(true);
+
+    if (!title || !content) {
+      setError('Title and review content are required.');
+      setLoading(false);
       return;
     }
 
-    setLoading(true);
-    setError('');
-    setSuccess(false);
-
     try {
-      const response = await fetch('/api/journals', {
+      const res = await fetch('/api/reviews', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          game_id: gameId,
           title,
-          description,
-          content,
-          recommended,
-          game_id: Number(gameId),
+          body: content,
           rating,
-          thumbnail, // Sends the user-defined image URL to your backend database
+          recommended,
         }),
       });
 
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || 'Failed to submit journal entry.');
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.error || 'Failed to publish review.');
+        return;
       }
 
       setSuccess(true);
-      setTitle('');
-      setDescription('');
-      setContent('');
-      
       setTimeout(() => {
-        router.push('/journal'); 
+        router.push('/reviews');
         router.refresh();
       }, 1500);
-
-    } catch (err: any) {
-      setError(err.message || 'Something went wrong.');
+    } catch {
+      setError('Network error. Please try again.');
     } finally {
       setLoading(false);
     }
-  };
+  }
+
+  if (success) {
+    return (
+      <div className="flex items-center justify-center min-h-[50vh] py-12">
+        <div className="text-center space-y-4">
+          <div className="text-6xl">🎉</div>
+          <h2 className="font-headline text-3xl text-white font-bold">Review Published!</h2>
+          <p className="text-gray-400 text-sm">Redirecting you to the reviews feed...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="w-full text-gray-200 font-body">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-stretch">
-        
-        {/* Form Column */}
-        <div className="bg-brand-surface border border-neutral-900 rounded-xl p-6 shadow-2xl">
-          <div className="mb-6">
-            <Link href="/journal" className="text-xs font-semibold uppercase tracking-wider text-brand-primary-button hover:underline">
-              ← Back to Journals
-            </Link>
-            <h1 className="text-3xl font-headline font-bold text-white mt-2">Create Journal Entry</h1>
-            <p className="text-gray-400 text-sm font-light mt-1">Document your thoughts, rating, and gameplay experience.</p>
+    <div className="space-y-8 py-6">
+      <header className="rounded-3xl border border-white/10 bg-brand-surface p-8 shadow-2xl">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-3xl">
+            <p className="text-xs uppercase tracking-[0.3em] text-gray-500">Journal</p>
+            <h1 className="mt-3 text-4xl font-headline text-white font-bold sm:text-5xl">
+              Create a review
+            </h1>
+            <p className="mt-4 max-w-2xl text-sm leading-7 text-gray-400 sm:text-base">
+              Build a polished review entry with a standout image, a concise summary, the full article, and a verdict that readers can scan instantly.
+            </p>
           </div>
+          <Link
+            href="/profile/1/reviews"
+            className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-brand-primary-button transition hover:bg-white/10"
+          >
+            View my reviews
+          </Link>
+        </div>
+      </header>
+
+      <div className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
+        <form onSubmit={handleSubmit} className="space-y-6 rounded-3xl border border-white/10 bg-brand-surface p-6 shadow-xl">
+
+          <div className="space-y-2">
+            <label htmlFor="game" className="text-sm font-semibold uppercase tracking-[0.25em] text-gray-400">
+              Game
+            </label>
+            <select
+              id="game"
+              value={gameId}
+              onChange={(e) => setGameId(Number(e.target.value))}
+              className="w-full rounded-2xl border border-white/10 bg-brand-bg px-4 py-3 text-sm text-white outline-none transition focus:border-brand-primary cursor-pointer"
+            >
+              {ALL_GAMES.map(g => (
+                <option key={g.game_id} value={g.game_id}>{g.title}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="thumbnail" className="text-sm font-semibold uppercase tracking-[0.25em] text-gray-400">
+              Thumbnail image
+            </label>
+            <input
+              id="thumbnail"
+              type="url"
+              value={thumbnail}
+              onChange={(event) => setThumbnail(event.target.value)}
+              placeholder="https://example.com/cover.jpg"
+              className="w-full rounded-2xl border border-white/10 bg-brand-bg px-4 py-3 text-sm text-white outline-none transition focus:border-brand-primary"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="title" className="text-sm font-semibold uppercase tracking-[0.25em] text-gray-400">
+              Title *
+            </label>
+            <input
+              id="title"
+              type="text"
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="Name your review"
+              required
+              className="w-full rounded-2xl border border-white/10 bg-brand-bg px-4 py-3 text-sm text-white outline-none transition focus:border-brand-primary"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="description" className="text-sm font-semibold uppercase tracking-[0.25em] text-gray-400">
+              Short description
+            </label>
+            <textarea
+              id="description"
+              rows={3}
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder="Summarize the review in a sentence or two"
+              className="w-full rounded-2xl border border-white/10 bg-brand-bg px-4 py-3 text-sm text-white outline-none transition focus:border-brand-primary"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="content" className="text-sm font-semibold uppercase tracking-[0.25em] text-gray-400">
+              Review content *
+            </label>
+            <textarea
+              id="content"
+              rows={10}
+              value={content}
+              onChange={(event) => setContent(event.target.value)}
+              placeholder="Share your full thoughts here"
+              required
+              className="w-full rounded-2xl border border-white/10 bg-brand-bg px-4 py-3 text-sm leading-7 text-white outline-none transition focus:border-brand-primary"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="rating" className="text-sm font-semibold uppercase tracking-[0.25em] text-gray-400">
+              Rating (1-10)
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                id="rating"
+                type="range"
+                min={1}
+                max={10}
+                value={rating}
+                onChange={(e) => setRating(Number(e.target.value))}
+                className="flex-1 accent-brand-primary-button"
+              />
+              <span className="text-sm font-bold text-brand-primary-button w-6 text-center">{rating}</span>
+            </div>
+          </div>
+
+          <fieldset className="space-y-3">
+            <legend className="text-sm font-semibold uppercase tracking-[0.25em] text-gray-400">
+              Verdict
+            </legend>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <label className={`flex-1 rounded-2xl border px-4 py-3 text-sm font-semibold transition cursor-pointer ${recommended ? 'border-brand-primary bg-brand-primary/10 text-white' : 'border-white/10 bg-brand-bg text-gray-200'}`}>
+                <input
+                  type="radio"
+                  name="recommended"
+                  checked={recommended}
+                  onChange={() => setRecommended(true)}
+                  className="mr-3 inline-block h-4 w-4 accent-brand-primary"
+                />
+                Recommend
+              </label>
+              <label className={`flex-1 rounded-2xl border px-4 py-3 text-sm font-semibold transition cursor-pointer ${recommended ? 'border-white/10 bg-brand-bg text-gray-200' : 'border-red-400/40 bg-red-500/10 text-red-200'}`}>
+                <input
+                  type="radio"
+                  name="recommended"
+                  checked={!recommended}
+                  onChange={() => setRecommended(false)}
+                  className="mr-3 inline-block h-4 w-4 accent-red-400"
+                />
+                Do not recommend
+              </label>
+            </div>
+          </fieldset>
 
           {error && (
-            <div className="bg-red-500/10 border border-red-500/30 text-red-400 p-3 rounded-lg text-sm mb-4">
-              {error}
-            </div>
+            <p className="text-red-400 text-xs font-semibold">{error}</p>
           )}
 
-          {success && (
-            <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 p-3 rounded-lg text-sm mb-4">
-              Journal submitted successfully! Redirecting...
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Game Selector Dropdown */}
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">
-                Select Game
-              </label>
-              {fetchingGames ? (
-                <div className="h-11 bg-brand-surface-elevated rounded-lg animate-pulse flex items-center px-3 text-xs text-gray-500">
-                  Loading games database...
-                </div>
-              ) : (
-                <select
-                  value={gameId}
-                  onChange={(e) => setGameId(e.target.value)}
-                  className="w-full bg-brand-surface-elevated border border-neutral-800 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-brand-primary-button text-sm"
-                  required
-                >
-                  {games.length === 0 ? (
-                    <option value="">No games found in database</option>
-                  ) : (
-                    games.map((game) => {
-                      // Fallback support for schemas with game_id vs id
-                      const gId = game.id ?? (game as any).game_id;
-                      return (
-                        <option key={gId} value={gId}>
-                          {game.title}
-                        </option>
-                      );
-                    })
-                  )}
-                </select>
-              )}
-            </div>
-
-            {/* Custom Review Image URL */}
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">
-                Custom Review Image (URL)
-              </label>
-              <input
-                type="url"
-                placeholder="https://example.com/your-awesome-screenshot.jpg"
-                value={thumbnail}
-                onChange={(e) => setThumbnail(e.target.value)}
-                className="w-full bg-brand-surface-elevated border border-neutral-800 rounded-lg px-3 py-2.5 text-white placeholder-neutral-600 focus:outline-none focus:border-brand-primary-button text-sm"
-              />
-            </div>
-
-            {/* Entry Title */}
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">
-                Entry Title
-              </label>
-              <input
-                type="text"
-                placeholder="e.g., Finally beat the first boss!"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="w-full bg-brand-surface-elevated border border-neutral-800 rounded-lg px-3 py-2.5 text-white placeholder-neutral-600 focus:outline-none focus:border-brand-primary-button text-sm"
-                required
-              />
-            </div>
-
-            {/* Short Description */}
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">
-                Short Description
-              </label>
-              <input
-                type="text"
-                placeholder="A brief summary of this entry..."
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className="w-full bg-brand-surface-elevated border border-neutral-800 rounded-lg px-3 py-2.5 text-white placeholder-neutral-600 focus:outline-none focus:border-brand-primary-button text-sm"
-                required
-              />
-            </div>
-
-            {/* Rating and Recommendation Toggle */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">
-                  Rating (1-10)
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="10"
-                  value={rating}
-                  onChange={(e) => setRating(Number(e.target.value))}
-                  className="w-full bg-brand-surface-elevated border border-neutral-800 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-brand-primary-button text-sm"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">
-                  Recommend?
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setRecommended(!recommended)}
-                  className={`w-full py-2.5 rounded-lg font-medium transition-colors text-sm border ${
-                    recommended 
-                      ? 'bg-emerald-950/40 text-emerald-400 border-emerald-800/60' 
-                      : 'bg-rose-950/40 text-rose-400 border-rose-800/60'
-                  }`}
-                >
-                  {recommended ? '👍 Yes' : '👎 No'}
-                </button>
-              </div>
-            </div>
-
-            {/* Journal Content Editor */}
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">
-                Journal thoughts
-              </label>
-              <textarea
-                rows={6}
-                placeholder="Write down your adventure notes..."
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                className="w-full bg-brand-surface-elevated border border-neutral-800 rounded-lg px-3 py-2.5 text-white placeholder-neutral-600 focus:outline-none focus:border-brand-primary-button resize-none text-sm leading-relaxed"
-                required
-              />
-            </div>
-
-            {/* Submit Button (Uses your theme green color var) */}
-            <button
-              type="submit"
-              disabled={loading || fetchingGames}
-              className="w-full bg-brand-primary-button hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-black font-semibold py-3 rounded-lg transition-all"
+          <div className="flex flex-wrap gap-3 pt-2">
+            <button type="submit" disabled={loading}
+              className="rounded-full bg-brand-primary-button px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:opacity-90 disabled:opacity-50 cursor-pointer"
             >
-              {loading ? 'Submitting Entry...' : 'Post Entry'}
+              {loading ? 'Publishing...' : 'Publish review'}
             </button>
-          </form>
-        </div>
-
-        {/* Live Preview Column */}
-        <div className="sticky top-12 h-full bg-brand-surface border border-neutral-900 rounded-xl overflow-hidden shadow-2xl flex flex-col">
-          <div className="relative h-56 bg-neutral-900">
-            {/* Renders the user's customized image URL directly */}
-            <img
-              src={thumbnail || 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=1200&q=80'}
-              alt="Custom Review Cover"
-              className="w-full h-full object-cover opacity-70"
-              onError={(e) => {
-                // Fallback in case of broken URLs
-                e.currentTarget.src = 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=1200&q=80';
-              }}
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-brand-surface via-transparent to-transparent" />
-            <div className="absolute bottom-4 left-4">
-              <span className="text-xs font-bold uppercase tracking-widest text-brand-primary-light bg-brand-primary/80 border border-brand-primary-light/20 px-3 py-1 rounded-full">
-                {selectedGame ? selectedGame.title : 'No Game Selected'}
-              </span>
-            </div>
           </div>
+        </form>
 
-          <div className="p-6 space-y-4 flex-grow">
-            <div>
-              <div className="flex justify-between items-start gap-4">
-                {/* Added break-words */}
-                <h2 className="text-2xl font-headline font-bold text-white leading-tight break-words max-w-[80%]">
-                  {title || 'Your Entry Title Preview'}
-                </h2>
-                <div className="flex items-center gap-1 shrink-0">
-                  <span className="text-sm font-semibold text-yellow-500">★ {rating}/10</span>
-                </div>
+        <aside className="rounded-3xl border border-white/10 bg-brand-surface p-6 shadow-xl">
+          <p className="text-xs uppercase tracking-[0.3em] text-gray-500">Preview</p>
+          <div className="mt-4 overflow-hidden rounded-3xl border border-white/10 bg-brand-bg">
+            <div className="aspect-video w-full bg-cover bg-center" style={{ backgroundImage: `url(${thumbnail})` }} />
+            <div className="space-y-4 p-5">
+              <div>
+                <h2 className="text-xl font-semibold text-white">{title || 'Untitled review'}</h2>
+                <p className="mt-2 text-sm leading-7 text-gray-400">{description || 'Add a short description to introduce the review.'}</p>
               </div>
-              {/* Added break-words */}
-              <p className="text-sm text-gray-400 mt-1.5 italic break-words">
-                {description || 'This is where your short description snippet will show...'}
-              </p>
-            </div>
 
-            <hr className="border-neutral-800" />
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p className="text-xs uppercase tracking-[0.25em] text-gray-500">Review</p>
+                <p className="mt-2 text-sm leading-7 text-gray-300">{content || 'Your full review will appear here.'}</p>
+              </div>
 
-            {/* Added break-words */}
-            <div className="text-sm text-gray-300 leading-relaxed min-h-[120px] whitespace-pre-wrap break-words">
-              {content || 'Start writing to see your live entry render here...'}
+              <div className={`rounded-2xl border p-4 ${recommended ? 'border-emerald-500/20 bg-emerald-500/10' : 'border-red-500/20 bg-red-500/10'}`}>
+                <p className="text-xs uppercase tracking-[0.25em] text-gray-300">Verdict</p>
+                <p className="mt-2 text-sm leading-7 text-white">{recommended ? 'Recommended' : 'Not recommended'} · {rating}/10</p>
+              </div>
             </div>
           </div>
-        </div>
-
+        </aside>
       </div>
     </div>
   );

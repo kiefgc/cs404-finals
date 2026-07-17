@@ -1,81 +1,63 @@
-import { Suspense } from 'react';
+'use client';
+
+import { useSearchParams, useRouter } from 'next/navigation';
+import { useState, useMemo, Suspense } from 'react';
 import GameCard from '@/components/gamecard';
-import GameFilters from '@/components/game-filters';
-import { prisma } from '@/lib/prisma';
-import { Game } from '@/types';
+import { ALL_GAMES } from '@/lib/mockData';
 
-export const revalidate = 0; // Ensure data stays fully fresh
+const GENRES = ['All', 'Action', 'Exploration', 'Management', 'Narrative Adventure', 'Platformer', 'Puzzle', 'Racing', 'Simulation', 'Strategy', 'Survival'];
 
-interface PageProps {
-  searchParams: Promise<{
-    search?: string;
-    genre?: string;
-    sort?: string;
-  }>;
-}
+function GamesContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
 
-async function GamesContent({ searchParams }: { searchParams: { search?: string; genre?: string; sort?: string } }) {
-  const search = searchParams.search || '';
-  const genre = searchParams.genre || 'All';
-  const sort = searchParams.sort || 'title';
+  const search = searchParams.get('search') || '';
+  const genre = searchParams.get('genre') || 'All';
+  const sort = searchParams.get('sort') || 'title';
+  const [localSearch, setLocalSearch] = useState(search);
 
-  // 1. Fetch available genres dynamically from the database
-  const dbGenres = await prisma.genre.findMany({
-    orderBy: { name: 'asc' },
-  });
-  const genreList = dbGenres.map(g => g.name);
+  const filtered = useMemo(() => {
+    let games = [...ALL_GAMES];
 
-  // 2. Build our database filters dynamically based on search parameters
-  const whereClause: any = {};
+    if (search) {
+      const q = search.toLowerCase();
+      games = games.filter(g => g.title.toLowerCase().includes(q));
+    }
 
-  if (search) {
-    whereClause.title = {
-      contains: search,
-      mode: 'insensitive', // Safe, case-insensitive title matching
-    };
+    if (genre && genre !== 'All') {
+      games = games.filter(g => g.genre_name === genre);
+    }
+
+    switch (sort) {
+      case 'rating':
+        games.sort((a, b) => b.rating_avg - a.rating_avg);
+        break;
+      case 'release_date':
+        games.sort((a, b) => new Date(b.release_date).getTime() - new Date(a.release_date).getTime());
+        break;
+      case 'title':
+      default:
+        games.sort((a, b) => a.title.localeCompare(b.title));
+        break;
+    }
+
+    return games;
+  }, [search, genre, sort]);
+
+  function updateParam(key: string, value: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (value && value !== 'All') {
+      params.set(key, value);
+    } else {
+      params.delete(key);
+    }
+    router.push(`/games?${params.toString()}`);
   }
 
-  if (genre && genre !== 'All') {
-    whereClause.game_genres = {
-      some: {
-        genre: {
-          name: genre,
-        },
-      },
-    };
+  function handleLocalSearch(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    updateParam('search', localSearch);
   }
-
-  // 3. Match the UI sort filters to relational Prisma sorting orders
-  let orderByClause: any = { title: 'asc' };
-  if (sort === 'rating') {
-    orderByClause = { rating_avg: 'desc' };
-  } else if (sort === 'release_date') {
-    orderByClause = { release_date: 'desc' };
-  }
-
-  // 4. Query the database
-  const dbGames = await prisma.game.findMany({
-    where: whereClause,
-    orderBy: orderByClause,
-    include: {
-      game_genres: {
-        include: {
-          genre: true,
-        },
-      },
-    },
-  });
-
-  // 5. Transform raw Prisma schema rows into our component types
-  const games: Game[] = dbGames.map((game) => ({
-    game_id: game.id,
-    title: game.title,
-    release_date: game.release_date.toISOString(),
-    cover_image: game.cover_image,
-    description: game.description,
-    rating_avg: game.rating_avg,
-    genre_name: game.game_genres[0]?.genre?.name || '',
-  }));
 
   return (
     <div className="space-y-8 py-2">
@@ -93,40 +75,61 @@ async function GamesContent({ searchParams }: { searchParams: { search?: string;
         </div>
 
         <div className="rounded border border-white/10 bg-brand-surface px-4 py-3 text-sm text-gray-400">
-          <span className="font-semibold text-white">{games.length}</span> titles available
+          <span className="font-semibold text-white">{filtered.length}</span> titles available
         </div>
       </div>
 
-      {/* Interactive Filters (Client Component) */}
-      <GameFilters genres={genreList} />
+      <div className="flex flex-wrap gap-4 items-center">
+        <form onSubmit={handleLocalSearch} className="relative flex-1 min-w-[200px] max-w-md">
+          <input
+            type="text"
+            value={localSearch}
+            onChange={(e) => setLocalSearch(e.target.value)}
+            placeholder="Search games..."
+            className="w-full bg-brand-surface border border-white/10 rounded px-3 py-2 text-xs focus:outline-none focus:border-brand-primary transition pl-8 placeholder:text-gray-600 text-gray-200"
+          />
+          <button type="submit" className="absolute left-2.5 top-2.5 text-gray-600 hover:text-brand-primary-button transition cursor-pointer">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.603 10.601Z" />
+            </svg>
+          </button>
+        </form>
 
-      {/* Database-sourced Grid */}
-      {games.length > 0 ? (
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {games.map((game) => (
-            <div
-              key={game.game_id}
-              className="rounded border border-white/10 bg-brand-surface p-3 shadow-lg shadow-black/10"
-            >
-              <GameCard game={game} />
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p className="text-center text-gray-500 py-12 text-sm">
-          No games found matching your filters.
-        </p>
+        <select value={genre} onChange={(e) => updateParam('genre', e.target.value)}
+          className="bg-brand-surface border border-white/10 rounded px-3 py-2 text-xs text-gray-200 focus:outline-none focus:border-brand-primary transition cursor-pointer">
+          {GENRES.map(g => <option key={g} value={g}>{g}</option>)}
+        </select>
+
+        <select value={sort} onChange={(e) => updateParam('sort', e.target.value)}
+          className="bg-brand-surface border border-white/10 rounded px-3 py-2 text-xs text-gray-200 focus:outline-none focus:border-brand-primary transition cursor-pointer">
+          <option value="title">Sort: A-Z</option>
+          <option value="rating">Sort: Rating</option>
+          <option value="release_date">Sort: Newest</option>
+        </select>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {filtered.map((game) => (
+          <div
+            key={game.game_id}
+            className="rounded border border-white/10 bg-brand-surface p-3 shadow-lg shadow-black/10"
+          >
+            <GameCard game={game} />
+          </div>
+        ))}
+      </div>
+
+      {filtered.length === 0 && (
+        <p className="text-center text-gray-500 py-12 text-sm">No games found matching your filters.</p>
       )}
     </div>
   );
 }
 
-export default async function GamesPage({ searchParams }: PageProps) {
-  const resolvedParams = await searchParams;
-
+export default function GamesPage() {
   return (
     <Suspense fallback={<div className="py-12 text-center text-gray-500 text-sm">Loading games...</div>}>
-      <GamesContent searchParams={resolvedParams} />
+      <GamesContent />
     </Suspense>
   );
 }
