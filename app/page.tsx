@@ -41,7 +41,7 @@ async function getHomeData() {
       title: game.title,
       release_date: game.release_date.toISOString(),
       cover_image: game.cover_image || null,
-      description: game.description,
+      descript: game.description,
       rating_avg: game.rating_avg,
       genre_name: primaryGenre,
     };
