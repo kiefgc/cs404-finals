@@ -3,7 +3,7 @@
 import { useState } from 'react';
 
 interface LikeReviewButtonProps {
-  reviewId: string; // or number, depending on your schema
+  reviewId: string | number; // or number, depending on your schema
   initialLikes?: number; // Marked as optional for safety
 }
 

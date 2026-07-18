@@ -254,7 +254,7 @@ export default async function ReviewDetailPage({ params }: PageProps) {
             <span className="text-gray-500 text-[10px] uppercase tracking-widest font-bold">Community Response</span>
           </div>
           <ReviewActionButtons 
-            reviewId={review.id.string} 
+            reviewId={review.id.ToString} 
             initialLikes={review.likes_count} 
           />
         </section>
