@@ -7,11 +7,15 @@ interface ReviewCardProps {
 }
 
 export default function ReviewCard({ review: critique, compact = false }: ReviewCardProps) {
+  // 1. Safe date fallback to prevent crashing on missing dates
   const reviewDate = critique.date_created ? new Date(critique.date_created) : new Date();
   const formattedDate = reviewDate.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric'
   });
+
+  // 2. Safe game title fallback (if game relation is broken or undefined)
+  const displayGameTitle = critique.game_title || 'Unknown Game';
 
   if (compact) {
     // Compact card variant for dense listings
@@ -47,7 +51,7 @@ export default function ReviewCard({ review: critique, compact = false }: Review
         {/* Visual Content Block */}
         <div className="relative aspect-video w-full bg-gradient-to-b from-brand-tertiary/10 to-brand-bg flex items-center justify-center p-4">
           <span className="text-gray-700 font-mono text-[10px] uppercase tracking-widest text-center opacity-40">
-            {critique.game_title}
+            {displayGameTitle}
           </span>
         </div>
 
@@ -58,7 +62,8 @@ export default function ReviewCard({ review: critique, compact = false }: Review
           </h4>
 
           <div className="flex items-center justify-between text-xs">
-            <span className="text-gray-500 truncate">{critique.game_title}</span>
+            {/* Using our fallback game title here */}
+            <span className="text-gray-500 truncate max-w-[150px]">{displayGameTitle}</span>
             <span className={`font-bold ${critique.recommended ? 'text-emerald-400' : 'text-red-400'}`}>
               {critique.recommended ? 'Recommend' : 'Not Recommended'}
             </span>

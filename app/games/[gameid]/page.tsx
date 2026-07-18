@@ -1,146 +1,229 @@
-'use client';
-
 import Link from 'next/link';
-import { useState } from 'react';
-import { getGameDetailById } from '@/lib/mockData';
-import { use } from 'react';
+import { notFound } from 'next/navigation';
+import { prisma } from '@/lib/prisma';
 
-export default function GameDetailsPage({ params }: { params: Promise<{ gameid: string }> }) {
-  const { gameid } = use(params);
-  const game = getGameDetailById(gameid);
-  const [inLibrary, setInLibrary] = useState(false);
-  const [likedReviews, setLikedReviews] = useState<Record<number, { liked: boolean; count: number }>>({});
+export const revalidate = 0; // Ensure data stays fresh
 
-  async function toggleLibrary() {
-    try {
-      const res = await fetch(`/api/games/${gameid}/save`, { method: 'POST' });
-      if (!res.ok) return;
-      setInLibrary(prev => !prev);
-    } catch {
-      // silently fail
-    }
-  }
+interface GamePageProps {
+  params: Promise<{ gameid: string }>;
+}
 
-  async function toggleReviewLike(reviewId: number) {
-    try {
-      const res = await fetch(`/api/reviews/${reviewId}/like`, { method: 'POST' });
-      if (!res.ok) return;
-      const data = await res.json();
-      setLikedReviews(prev => ({
-        ...prev,
-        [reviewId]: { liked: data.liked, count: data.likes_count }
-      }));
-    } catch {
-      // silently fail
-    }
-  }
+async function getGameDetails(gameIdStr: string) {
+  const gameId = parseInt(gameIdStr, 10);
+  if (isNaN(gameId)) return null;
+
+  const game = await prisma.game.findUnique({
+    where: { id: gameId },
+    include: {
+      game_genres: {
+        include: {
+          genre: true,
+        },
+      },
+      reviews: {
+        where: { is_archived: false },
+        orderBy: { created_at: 'desc' },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          _count: {
+            select: {
+              likes: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!game) return null;
+
+  // Defensive scale logic: If raw rating is <= 5, scale it to 10. Otherwise, preserve its scale.
+  const displayRating = game.rating_avg <= 5 
+    ? (game.rating_avg * 2).toFixed(1) 
+    : game.rating_avg.toFixed(1);
+
+  return {
+    id: game.id,
+    title: game.title,
+    description: game.description,
+    cover_image: game.cover_image,
+    rating_avg: displayRating,
+    release_date: game.release_date.toLocaleDateString('en-US', {
+      month: 'short',
+      year: 'numeric',
+    }),
+    genres: game.game_genres.map((gg) => gg.genre.name),
+    reviews: game.reviews.map((review) => {
+      const diffTime = Math.abs(new Date().getTime() - review.created_at.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      let relativeTime = `${diffDays} days ago`;
+      if (diffDays === 1) relativeTime = "Yesterday";
+      if (diffDays > 7) relativeTime = `${Math.floor(diffDays / 7)} weeks ago`;
+
+      // Safe fallback username extraction
+      const userName = review.user?.name || 'Anonymous Critic';
+
+      return {
+        id: review.id,
+        title: review.title,
+        body: review.body,
+        rating: review.rating,
+        recommended: review.recommended,
+        posted_ago: relativeTime.toUpperCase(),
+        user: {
+          id: review.user?.id || 0,
+          name: userName,
+        },
+        likes_count: review._count?.likes || 0,
+      };
+    }),
+  };
+}
+
+export default async function GameDetailPage({ params }: GamePageProps) {
+  const { gameid } = await params;
+  const game = await getGameDetails(gameid);
+
+  if (!game) notFound();
 
   return (
-    <div className="space-y-16 py-4">
-
-      <div className="relative min-h-[450px] bg-brand-surface border border-white/5 rounded-lg overflow-hidden flex items-end p-8 md:p-12 shadow-2xl">
-        <div className="absolute inset-0 bg-gradient-to-t from-brand-bg via-brand-bg/60 to-brand-tertiary/20 z-10" />
-        <div className="absolute inset-0 flex items-center justify-center text-white/5 text-sm font-mono tracking-widest uppercase select-none">
-          [ Giant Landscape Banner Artwork Background ]
+    <div className="min-h-screen bg-brand-bg text-white">
+      {/* 1. Hero Container Section with safely positioned absolute background */}
+      <section className="relative overflow-hidden rounded-3xl border border-white/5 bg-brand-surface/40">
+        {/* Background Image Block - Increased opacity to 70% for much better visibility */}
+        <div className="absolute inset-0 z-0">
+          {game.cover_image && (
+            <img
+              src={game.cover_image}
+              alt={`${game.title} backdrop`}
+              className="h-full w-full object-cover object-top opacity-70 transition-opacity duration-300"
+            />
+          )}
+          {/* Adjusted gradients: Balanced fade-to-black so the artwork details are preserved */}
+          <div className="absolute inset-0 bg-gradient-to-t from-brand-bg via-brand-bg/40 to-black/15" />
+          <div className="absolute inset-0 bg-gradient-to-r from-brand-bg/80 via-transparent to-transparent" />
         </div>
 
-        <div className="relative z-20 flex flex-col md:flex-row justify-between items-start md:items-end w-full gap-6">
-          <div className="max-w-2xl space-y-3">
-            <div className="flex items-center gap-3">
-              <span className="text-[10px] uppercase font-bold tracking-widest text-gray-400">
-                {game.release_date}
-              </span>
-            </div>
-            <h1 className="font-headline text-4xl md:text-6xl text-white font-bold leading-tight">
-              {game.title}
-            </h1>
-            <p className="text-gray-300 text-sm md:text-base leading-relaxed font-light">
-              {game.description}
-            </p>
-          </div>
+        {/* Hero Content (Restricted inside bounds safely above background) */}
+        <div className="relative z-10 mx-auto max-w-7xl px-6 py-12 md:px-12 md:py-20">
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-3 lg:items-end">
+            
+            {/* Left Column: Context Metadata & Info */}
+            <div className="lg:col-span-2 space-y-5">
+              <div className="flex flex-wrap items-center gap-3 text-xs font-semibold tracking-widest text-gray-400">
+                <span className="text-gray-300">RELEASED {game.release_date.toUpperCase()}</span>
+                {game.genres.map((genre) => (
+                  <span key={genre} className="text-brand-primary-button/90">
+                    · {genre.toUpperCase()}
+                  </span>
+                ))}
+              </div>
 
-          <div className="flex md:flex-col items-center md:items-end justify-between w-full md:w-auto gap-4 pt-4 md:pt-0 border-t border-white/5 md:border-none">
-            <div className="bg-brand-bg/80 border border-white/10 px-4 py-3 rounded backdrop-blur-xs text-center shadow-lg min-w-[100px]">
-              <div className="text-2xl md:text-4xl font-mono font-bold text-brand-primary-button">
-                {game.rating_avg.toFixed(1)}
-              </div>
-              <div className="text-[9px] uppercase tracking-wider font-bold text-gray-500 mt-0.5">
-                Community
-              </div>
+              <h1 className="font-serif text-4xl font-bold leading-tight tracking-tight text-white sm:text-5xl lg:text-6xl drop-shadow-[0_4px_12px_rgba(0,0,0,0.5)]">
+                {game.title}
+              </h1>
+
+              <p className="max-w-2xl text-sm leading-relaxed text-gray-200 md:text-base drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)]">
+                {game.description}
+              </p>
             </div>
-            <button onClick={toggleLibrary}
-              className={`font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition text-xs shadow-md cursor-pointer ${inLibrary ? 'bg-white/10 text-gray-300 border border-white/20' : 'bg-brand-primary-button hover:bg-brand-primary-light text-brand-bg'}`}>
-              {inLibrary ? 'In Library' : 'Add To Library'}
-            </button>
+
+            {/* Right Column: Score Box & CTA Button */}
+            <div className="flex flex-row items-center gap-4 justify-start lg:flex-col lg:items-end lg:justify-end">
+              {/* Score Badge */}
+              <div className="flex h-20 w-20 flex-col items-center justify-center border border-white/10 bg-black/85 p-3 text-center rounded shadow-2xl">
+                <span className="text-2xl font-bold text-[#96c2a6]">{game.rating_avg}</span>
+                <span className="text-[8px] mt-1 font-semibold uppercase tracking-widest text-gray-400 animate-pulse">QuestLog Score</span>
+              </div>
+
+              {/* Action Button */}
+              <button className="w-full max-w-[170px] rounded bg-[#a8cca4] py-3 text-center text-xs font-bold uppercase tracking-widest text-brand-bg transition duration-200 hover:bg-[#bce0b8] hover:shadow-lg hover:shadow-emerald-950/20">
+                Add to Library
+              </button>
+            </div>
+
           </div>
         </div>
-      </div>
+      </section>
 
-      <div className="space-y-6">
-        <div className="flex justify-between items-baseline border-b border-white/5 pb-3">
+      {/* 2. Community Consensus / Reviews Grid */}
+      <section className="mx-auto max-w-7xl py-16 space-y-8">
+        <div className="flex items-end justify-between border-b border-white/10 pb-5">
           <div>
-            <h2 className="font-headline text-2xl text-white font-bold">Community Consensus</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Top rated reviews from the founding community.</p>
+            <h2 className="font-serif text-3xl font-semibold text-white">Community Consensus</h2>
+            <p className="mt-1 text-sm text-gray-500">Top-rated reviews from the QuestLog community.</p>
           </div>
-          <Link href={`/reviews`} className="text-xs uppercase tracking-widest font-bold text-gray-400 hover:text-brand-primary-button transition">
+          <Link
+            href="/reviews"
+            className="border border-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-emerald-400 hover:bg-white/5 transition"
+          >
             Read All Reviews
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {game.reviews.map((rev) => (
-            <div key={rev.id} className="bg-brand-surface border border-white/5 rounded p-6 flex flex-col justify-between space-y-4 shadow-md hover:border-brand-primary-button/20 transition">
-              <div className="space-y-2">
-                <div className="flex justify-between items-center text-xs">
-                  <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-full bg-brand-secondary flex items-center justify-center text-[10px] font-bold text-white uppercase">
-                      {rev.user[0]}
+        {/* Review Cards Grid */}
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          {game.reviews.length > 0 ? (
+            game.reviews.map((review) => (
+              <article
+                key={review.id}
+                className="flex flex-col justify-between rounded border border-white/5 bg-brand-surface p-6 shadow-xl"
+              >
+                <div className="space-y-4">
+                  {/* User Profile Info & Score badge */}
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded bg-brand-secondary text-sm font-semibold uppercase text-white">
+                        {review.user.name.charAt(0)}
+                      </div>
+                      <div>
+                        <Link
+                          href={`/profile/${review.user.id}`}
+                          className="text-sm font-semibold text-white hover:text-brand-primary-button transition"
+                        >
+                          {review.user.name}
+                        </Link>
+                        {/* Interactive Dynamic Star Rating system */}
+                        <div className="flex text-xs text-[#a8cca4] mt-0.5">
+                          {"★".repeat(Math.max(0, Math.min(5, review.rating)))}
+                          {"☆".repeat(Math.max(0, 5 - Math.min(5, review.rating)))}
+                        </div>
+                      </div>
                     </div>
-                    <span className="font-bold text-gray-300">{rev.user}</span>
+
+                    {/* Upvote/Helpful Badge */}
+                    <div className="flex items-center gap-1 rounded bg-[#a8cca4]/10 px-2 py-1 text-xs text-[#a8cca4]">
+                      <span>👍</span>
+                      <span>{review.likes_count.toLocaleString()}</span>
+                    </div>
                   </div>
-                  <div className={`text-sm font-bold ${rev.recommended ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {rev.recommended ? 'Recommend' : 'Not Recommended'}
+
+                  {/* Review Text Block */}
+                  <div className="space-y-2 pt-2">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-400">{review.title}</p>
+                    <p className="font-serif italic text-sm leading-relaxed text-gray-300 line-clamp-4">
+                      "{review.body}"
+                    </p>
                   </div>
                 </div>
-                <p className="text-gray-400 text-xs leading-relaxed font-light italic">
-                  &ldquo;{rev.text}&rdquo;
-                </p>
-              </div>
 
-              <div className="flex justify-between items-center text-[10px] font-bold tracking-wider text-gray-600 uppercase border-t border-white/5 pt-3">
-                <span>{rev.time}</span>
-                <button onClick={() => toggleReviewLike(rev.id)}
-                  className={`flex items-center gap-1 transition cursor-pointer ${likedReviews[rev.id]?.liked ? 'text-brand-primary-button' : 'text-brand-secondary hover:text-brand-primary-button'}`}>
-                  👍 {(likedReviews[rev.id]?.count ?? rev.upvotes).toLocaleString()}
-                </button>
-              </div>
+                <div className="mt-6 border-t border-white/5 pt-4 text-[9px] tracking-widest text-gray-500">
+                  POSTED {review.posted_ago}
+                </div>
+              </article>
+            ))
+          ) : (
+            <div className="col-span-2 rounded border border-dashed border-white/10 p-12 text-center text-sm text-gray-500">
+              No reviews have been written for this game yet.
             </div>
-          ))}
+          )}
         </div>
-      </div>
-
-      <div className="space-y-6">
-        <div className="border-b border-white/5 pb-3">
-          <h2 className="font-headline text-2xl text-white font-bold">Visual Dossier</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Official captures from the Land of Shadow.</p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="sm:col-span-2 aspect-video bg-brand-surface border border-white/5 rounded flex items-center justify-center text-xs text-gray-600 font-mono shadow-md">
-            [ Feature Panoramic Shot capture ]
-          </div>
-          <div className="aspect-video sm:aspect-auto bg-brand-surface border border-white/5 rounded flex items-center justify-center text-xs text-gray-600 font-mono shadow-md">
-            [ Character Dossier Capture ]
-          </div>
-          <div className="aspect-video bg-brand-surface border border-white/5 rounded flex items-center justify-center text-xs text-gray-600 font-mono shadow-md">
-            [ Atmospheric Setting Capture ]
-          </div>
-          <div className="sm:col-span-2 aspect-video sm:aspect-auto bg-brand-surface border border-white/5 rounded flex items-center justify-center text-xs text-gray-600 font-mono shadow-md">
-            [ Combat Dynamic Capture ]
-          </div>
-        </div>
-      </div>
-
+      </section>
     </div>
   );
 }
