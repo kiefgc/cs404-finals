@@ -14,6 +14,12 @@ interface UserPayload extends JWTPayload {
 
 // Validate JWT secret exists
 function getJwtSecret(): Uint8Array {
+  // TEMPORARY DEBUG: Let's see what environment keys actually exist
+  console.log("--- ENV DEBUG START ---");
+  console.log("All available env keys:", Object.keys(process.env));
+  console.log("Is JWT_SECRET present?:", !!process.env.JWT_SECRET);
+  console.log("--- ENV DEBUG END ---");
+
   if (!process.env.JWT_SECRET) {
     throw new Error("JWT_SECRET environment variable is not set");
   }
