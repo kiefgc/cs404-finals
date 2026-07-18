@@ -73,7 +73,7 @@ async function GamesContent({ searchParams }: { searchParams: { search?: string;
     title: game.title,
     release_date: game.release_date.toISOString(),
     cover_image: game.cover_image,
-    description: game.description,
+    descript: game.description,
     rating_avg: game.rating_avg,
     genre_name: game.game_genres[0]?.genre?.name || '',
   }));
