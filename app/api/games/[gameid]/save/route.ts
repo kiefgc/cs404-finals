@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth/routeHandler";
 import { prisma } from "@/lib/prisma";
+import { revalidateTag } from "next/cache";
 
 // POST handler - save/unsave a game to user's library
 export const POST = withAuth(async (
@@ -57,6 +58,10 @@ export const POST = withAuth(async (
       });
       saved = true;
     }
+
+    // Invalidate cache
+    revalidateTag('games', {});
+    revalidateTag('dashboard-user', {});
 
     return NextResponse.json({ success: true, saved });
 

@@ -1,6 +1,7 @@
 import { withAuth } from "@/lib/auth/routeHandler";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 
 export const POST = withAuth(async (req, user) => {
   try {
@@ -47,6 +48,10 @@ export const POST = withAuth(async (req, user) => {
         game_id: gameId
       }
     });
+
+    // Invalidate cache
+    revalidateTag('games', {});
+    revalidateTag('dashboard-user', {});
 
     return NextResponse.json({
       success: true,

@@ -1,6 +1,7 @@
 import { withAuth } from "@/lib/auth/routeHandler";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 
 export const POST = withAuth(
   async (
@@ -94,3 +95,9 @@ export const POST = withAuth(
     }
   },
 );
+
+// Invalidate reviews cache on like/unlike
+export async function PATCH(req: Request) {
+  revalidateTag('reviews', {});
+  return NextResponse.json({ success: true });
+}

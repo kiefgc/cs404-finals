@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth/routeHandler";
 import { z } from "zod";
+import { unstable_cache } from "next/cache";
+import { revalidateTag } from "next/cache";
 
 // Validation schema for the reviews feed
 const querySchema = z.object({
@@ -20,37 +22,21 @@ const createReviewSchema = z.object({
   recommended: z.boolean().default(true),
 });
 
-export async function GET(req: Request) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const queryParams = Object.fromEntries(searchParams.entries());
-    const validation = querySchema.safeParse(queryParams);
-
-    if (!validation.success) {
-      return NextResponse.json(
-        { error: validation.error.issues[0].message },
-        { status: 400 },
-      );
-    }
-
-    const { limit, game, user, sort } = validation.data;
-
-    // Build where clause for filtering
+// Cached query function - keyed by query parameters
+const getReviewsCached = unstable_cache(
+  async (limit: number, game: string | undefined, user: number | undefined, sort: string) => {
     const whereClause: any = { is_archived: false };
 
-    // Filter by game title (case-insensitive)
     if (game) {
       whereClause.game = {
         title: { contains: game, mode: "insensitive" },
       };
     }
 
-    // Filter by user ID
     if (user) {
       whereClause.user_id = user;
     }
 
-    // Build order by clause
     let orderByClause: any;
 
     switch (sort) {
@@ -66,7 +52,6 @@ export async function GET(req: Request) {
         break;
     }
 
-    // Query the database
     const reviews = await prisma.review.findMany({
       where: whereClause,
       orderBy: orderByClause,
@@ -89,15 +74,13 @@ export async function GET(req: Request) {
             release_date: true,
           },
         },
-        likes: true,
         _count: {
           select: { likes: true },
         },
       },
     });
 
-    // Format the response
-    const formattedReviews = reviews.map((review) => ({
+    return reviews.map((review) => ({
       id: review.id,
       title: review.title,
       body: review.body,
@@ -120,8 +103,29 @@ export async function GET(req: Request) {
         release_date: review.game.release_date,
       },
       likes_count: review._count.likes,
-      liked_by_current_user: false, // Will be set by frontend based on auth context
+      liked_by_current_user: false,
     }));
+  },
+  ['reviews-feed'],
+  { tags: ['reviews'], revalidate: 60 }
+);
+
+export async function GET(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const queryParams = Object.fromEntries(searchParams.entries());
+    const validation = querySchema.safeParse(queryParams);
+
+    if (!validation.success) {
+      return NextResponse.json(
+        { error: validation.error.issues[0].message },
+        { status: 400 },
+      );
+    }
+
+    const { limit, game, user, sort } = validation.data;
+
+    const formattedReviews = await getReviewsCached(limit, game, user, sort);
 
     return NextResponse.json({ reviews: formattedReviews });
   } catch (error) {
@@ -208,6 +212,9 @@ export const POST = withAuth(
           },
         },
       });
+
+      // Invalidate reviews cache
+      revalidateTag('reviews', {});
 
       // Format the response
       const formattedReview = {

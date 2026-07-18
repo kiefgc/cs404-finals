@@ -1,6 +1,8 @@
 import { authGuard } from "@/lib/auth/authUtils";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import { unstable_cache } from "next/cache";
+import { revalidateTag } from "next/cache";
 
 interface GameGenreWithName {
   id: number;
@@ -44,31 +46,10 @@ interface GameWithRelations {
   };
 }
 
-export const GET = async (
-  request: Request,
-  { params }: { params: Promise<{ gameid: string }> },
-) => {
-  // 1. Check authentication safely via authGuard directly
-  let currentUser: { userId: number; email: string; role: string } | null =
-    null;
-  try {
-    currentUser = await authGuard(["USER", "ADMIN"]);
-  } catch (error) {
-    // If auth fails or user is a guest, let them proceed as null
-    currentUser = null;
-  }
-
-  // 2. Resolve Next.js 15 dynamic parameters
-  const { gameid } = await params;
-  const gameId = parseInt(gameid);
-
-  if (isNaN(gameId)) {
-    return NextResponse.json({ error: "Invalid game ID" }, { status: 400 });
-  }
-
-  try {
-    // 3. Fetch the game with its genres and reviews
-    const game = (await prisma.game.findUnique({
+// Cached function for base game data (without user-specific fields)
+const getGameBaseData = unstable_cache(
+  async (gameId: number): Promise<GameWithRelations | null> => {
+    return prisma.game.findUnique({
       where: { id: gameId },
       include: {
         game_genres: {
@@ -101,13 +82,43 @@ export const GET = async (
           },
         },
       },
-    })) as GameWithRelations | null;
+    }) as Promise<GameWithRelations | null>;
+  },
+  ['game-detail'],
+  { tags: ['game'], revalidate: 300 }
+);
+
+export const GET = async (
+  request: Request,
+  { params }: { params: Promise<{ gameid: string }> },
+) => {
+  // 1. Check authentication safely via authGuard directly
+  let currentUser: { userId: number; email: string; role: string } | null =
+    null;
+  try {
+    currentUser = await authGuard(["USER", "ADMIN"]);
+  } catch (error) {
+    // If auth fails or user is a guest, let them proceed as null
+    currentUser = null;
+  }
+
+  // 2. Resolve Next.js 15 dynamic parameters
+  const { gameid } = await params;
+  const gameId = parseInt(gameid);
+
+  if (isNaN(gameId)) {
+    return NextResponse.json({ error: "Invalid game ID" }, { status: 400 });
+  }
+
+  try {
+    // 3. Fetch the cached base game data
+    const game = await getGameBaseData(gameId);
 
     if (!game) {
       return NextResponse.json({ error: "Game not found" }, { status: 404 });
     }
 
-    // 4. Check if the current logged-in user has saved this game
+    // 4. Check if the current logged-in user has saved this game (NOT cached)
     let savedByCurrentUser = false;
     if (currentUser) {
       const savedGame = await prisma.savedGame.findUnique({
@@ -121,7 +132,7 @@ export const GET = async (
       savedByCurrentUser = !!savedGame;
     }
 
-    // 5. Format reviews with personal like status
+    // 5. Format reviews with personal like status (NOT cached - user specific)
     const formattedReviews = await Promise.all(
       game.reviews.map(async (review) => {
         let likedByCurrentUser = false;
@@ -181,3 +192,6 @@ export const GET = async (
     );
   }
 };
+
+// Note: Actual PATCH/DELETE handlers would go here and call revalidateTag('game')
+// For now, cache invalidation should be done in the actual mutation endpoints

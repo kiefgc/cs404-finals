@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { unstable_cache } from "next/cache";
+import { revalidateTag } from "next/cache";
 
 // Validation schemas
 const querySchema = z.object({
@@ -12,31 +14,25 @@ const querySchema = z.object({
   limit: z.coerce.number().min(1).max(50).default(20),
 });
 
-export async function GET(req: Request) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const queryParams = Object.fromEntries(searchParams.entries());
-    const validation = querySchema.safeParse(queryParams);
+const createGameSchema = z.object({
+  title: z.string().min(1).max(255),
+  description: z.string().min(1),
+  release_date: z.string().optional(),
+  cover_image: z.string().url().optional(),
+  genre_ids: z.array(z.number().int()).optional(),
+});
 
-    if (!validation.success) {
-      return NextResponse.json(
-        { error: validation.error.issues[0].message },
-        { status: 400 }
-      );
-    }
-
-    const { search, genre, sort, order, page, limit } = validation.data;
+// Cached query function - keyed by search params
+const getGamesCached = unstable_cache(
+  async (search: string | undefined, genre: string | undefined, sort: string | undefined, order: string | undefined, page: number, limit: number) => {
     const offset = (page - 1) * limit;
 
-    // Build where clause for filtering
     const whereClause: any = {};
 
-    // Title search
     if (search) {
       whereClause.title = { contains: search, mode: "insensitive" };
     }
 
-    // Genre filter
     if (genre) {
       whereClause.game_genres = {
         some: {
@@ -47,7 +43,6 @@ export async function GET(req: Request) {
       };
     }
 
-    // Build order by clause
     const orderByClause: any[] = [];
 
     if (sort === "title") {
@@ -57,11 +52,9 @@ export async function GET(req: Request) {
     } else if (sort === "rating") {
       orderByClause.push({ rating_avg: order || "desc" });
     } else {
-      // Default sorting
       orderByClause.push({ title: "asc" });
     }
 
-    // Query the database with pagination
     const [games, total] = await Promise.all([
       prisma.game.findMany({
         where: whereClause,
@@ -79,14 +72,12 @@ export async function GET(req: Request) {
       prisma.game.count({ where: whereClause })
     ]);
 
-    // Transform the genres structure for easier frontend consumption
     const formattedGames = games.map(game => ({
       ...game,
       genres: game.game_genres.map(g => g.genre.name)
     }));
 
-    // Prepare response with pagination metadata
-    const response = {
+    return {
       games: formattedGames,
       pagination: {
         total,
@@ -97,13 +88,78 @@ export async function GET(req: Request) {
         hasPrevPage: page > 1
       }
     };
+  },
+  ['games-list'],
+  { tags: ['games'], revalidate: 60 }
+);
 
-    return NextResponse.json(response);
+export async function GET(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const queryParams = Object.fromEntries(searchParams.entries());
+    const validation = querySchema.safeParse(queryParams);
+
+    if (!validation.success) {
+      return NextResponse.json(
+        { error: validation.error.issues[0].message },
+        { status: 400 }
+      );
+    }
+
+    const { search, genre, sort, order, page, limit } = validation.data;
+
+    const data = await getGamesCached(search, genre, sort, order, page, limit);
+
+    return NextResponse.json(data);
 
   } catch (error) {
     console.error("Error fetching games:", error);
     return NextResponse.json(
       { error: "Internal server error while fetching games." },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    const body = await req.json();
+    const validation = createGameSchema.safeParse(body);
+
+    if (!validation.success) {
+      return NextResponse.json(
+        { error: validation.error.issues[0].message },
+        { status: 400 }
+      );
+    }
+
+    const { title, description, release_date, cover_image, genre_ids } = validation.data;
+
+    const game = await prisma.game.create({
+      data: {
+        title,
+        description,
+        release_date: release_date ? new Date(release_date) : new Date(),
+        cover_image,
+        game_genres: {
+          create: genre_ids?.map(genre_id => ({
+            genre: { connect: { id: genre_id } }
+          })) || [],
+        },
+      },
+      include: {
+        game_genres: { include: { genre: true } }
+      }
+    });
+
+    // Invalidate games cache
+    // revalidateTag('games');
+
+    return NextResponse.json({ game }, { status: 201 });
+  } catch (error) {
+    console.error("Error creating game:", error);
+    return NextResponse.json(
+      { error: "Internal server error while creating game." },
       { status: 500 }
     );
   }

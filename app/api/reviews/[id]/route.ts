@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth/routeHandler";
 import { z } from "zod";
+import { revalidateTag } from "next/cache";
 
 // Validation schema for partial reviews updates
 const updateReviewSchema = z.object({
@@ -212,6 +213,12 @@ export const PATCH = withAuth(
   },
 );
 
+// Invalidate reviews cache on review update
+export async function PUT(req: Request) {
+  revalidateTag('reviews', {});
+  return NextResponse.json({ success: true });
+}
+
 // Higher-Order Component wrapper for protected DELETE handler
 export const DELETE = withAuth(
   async (
@@ -255,6 +262,9 @@ export const DELETE = withAuth(
         where: { id: reviewId },
         data: { is_archived: true },
       });
+
+      // Invalidate cache
+      revalidateTag('reviews', {});
 
       return NextResponse.json({ success: true });
     } catch (error) {
