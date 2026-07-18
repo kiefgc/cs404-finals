@@ -1,10 +1,22 @@
+// components/header.tsx
 'use client';
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, FormEvent } from 'react';
 
-export default function Header() {
+// Define the shape of our user prop matching your JWT payload/API response
+interface HeaderProps {
+  user: {
+    id: number;
+    email: string;
+    name: string;
+    handle: string;
+    role: string;
+  } | null;
+}
+
+export default function Header({ user }: HeaderProps) {
   const router = useRouter();
   const [search, setSearch] = useState('');
 
@@ -23,9 +35,7 @@ export default function Header() {
       <div className="max-w-7xl mx-auto flex items-center justify-between">
 
         <div className="flex items-center gap-8">
-          <Link href="/"
-            className="font-headline text-3xl font-bold tracking-wide text-brand-primary-button hover:opacity-90 transition"
-          >
+          <Link href="/" className="font-headline text-3xl font-bold tracking-wide text-brand-primary-button hover:opacity-90 transition">
             Website
           </Link>
 
@@ -52,15 +62,32 @@ export default function Header() {
             </button>
           </form>
 
-          <Link
-            href="/profile/1"
-            className="p-1.5 rounded-full border border-white/10 hover:border-brand-primary bg-brand-surface text-gray-400 hover:text-white transition"
-            title="View Profile"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-            </svg>
-          </Link>
+          {user ? (
+            <div className="flex items-center gap-4">
+              <Link
+                href={`/profile/${user.id}`}
+                className="p-1.5 rounded-full border border-white/10 hover:border-brand-primary bg-brand-surface text-gray-400 hover:text-white transition"
+                title={`Logged in as ${user.name}`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+                </svg>
+              </Link>
+              <a 
+                href="/api/auth/logout" 
+                className="text-xs font-bold uppercase tracking-wider text-red-400 hover:text-red-300 transition"
+              >
+                Logout
+              </a>
+            </div>
+          ) : (
+            <Link
+              href="/login"
+              className="text-xs font-bold uppercase tracking-wider text-brand-primary-button hover:text-white transition"
+            >
+              Sign In
+            </Link>
+          )}
         </div>
 
       </div>

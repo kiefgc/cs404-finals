@@ -1,11 +1,78 @@
 import Link from 'next/link';
+import { notFound } from 'next/navigation';
 import GameCard from '@/components/gamecard';
-import { getUserById, getUserLikedGames } from '@/lib/mockData';
+import { prisma } from '@/lib/prisma';
+import { Game } from '@/types';
 
-export default async function ProfileLikedGamesPage({ params }: { params: Promise<{ userid: string }> }) {
+export const revalidate = 0;
+
+interface ProfileLikedGamesPageProps {
+  params: Promise<{ userid: string }>;
+}
+
+async function getLikedGamesData(userIdStr: string) {
+  const userId = parseInt(userIdStr, 10);
+  if (isNaN(userId)) return null;
+
+  try {
+    // 1. Fetch user to display personal layout headings safely
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    });
+
+    if (!user) return null;
+
+    // 2. Fetch all games saved/liked by this user
+    const dbSavedGames = await prisma.savedGame.findMany({
+      where: { user_id: userId },
+      orderBy: { game_id: 'desc' },
+      include: {
+        game: {
+          include: {
+            game_genres: {
+              include: {
+                genre: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Map to unified Game types expected by <GameCard /> safely
+    const userLikedGames: Game[] = dbSavedGames.map((sg) => {
+      const primaryGenre = sg.game?.game_genres?.[0]?.genre?.name || 'Unknown';
+      return {
+        game_id: sg.game.id,
+        title: sg.game.title,
+        release_date: sg.game.release_date ? new Date(sg.game.release_date).toISOString() : new Date().toISOString(),
+        cover_image: sg.game.cover_image || null,
+        description: sg.game.description || '',
+        rating_avg: sg.game.rating_avg || 0,
+        genre_name: primaryGenre,
+      };
+    });
+
+    return {
+      profileUser: {
+        name: user.name || 'Anonymous Player',
+      },
+      userLikedGames,
+    };
+  } catch (error) {
+    console.error("Error fetching user liked games:", error);
+    return null;
+  }
+}
+
+export default async function ProfileLikedGamesPage({ params }: ProfileLikedGamesPageProps) {
   const { userid } = await params;
-  const profileUser = getUserById(userid);
-  const userLikedGames = getUserLikedGames(userid);
+  const data = await getLikedGamesData(userid);
+
+  if (!data) notFound();
+
+  const { profileUser, userLikedGames } = data;
 
   return (
     <div className="space-y-8 py-2">
@@ -45,16 +112,22 @@ export default async function ProfileLikedGamesPage({ params }: { params: Promis
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {userLikedGames.map((game) => (
-          <div
-            key={game.game_id}
-            className="rounded border border-white/10 bg-brand-surface p-3 shadow-lg shadow-black/10"
-          >
-            <GameCard game={game} />
-          </div>
-        ))}
-      </div>
+      {userLikedGames.length > 0 ? (
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {userLikedGames.map((game) => (
+            <div
+              key={game.game_id}
+              className="rounded border border-white/10 bg-brand-surface p-3 shadow-lg shadow-black/10"
+            >
+              <GameCard game={game} />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-12 bg-brand-surface/50 rounded-3xl border border-white/5 text-gray-500 text-sm">
+          No liked games in this catalog.
+        </div>
+      )}
     </div>
   );
 }
