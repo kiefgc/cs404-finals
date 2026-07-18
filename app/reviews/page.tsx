@@ -166,7 +166,7 @@ export default async function ReviewsPage() {
                       <div className="flex items-center gap-6">
                         {/* Compact customizable like action */}
                         <LikeReviewButton 
-                          reviewId={review.id.ToString()} 
+                          reviewId={review.id.toString()} 
                           initialLikes={review.likes_count} 
                         />
                       </div>
