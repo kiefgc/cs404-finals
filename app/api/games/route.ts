@@ -1,8 +1,22 @@
+import { authGuard } from "@/lib/auth/authUtils";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { unstable_cache } from "next/cache";
 import { revalidateTag } from "next/cache";
+
+/**
+ * Games List API Route
+ *
+ * GET  /api/games              - List games with search, filter, pagination (cached)
+ * POST /api/games              - Create new game (admin only)
+ *
+ * The POST endpoint:
+ * - Requires authenticated ADMIN user
+ * - Validates input with Zod schema
+ * - Creates game with genres
+ * - Revalidates dashboard-admin, dashboard-user, and game cache tags
+ */
 
 // Validation schemas
 const querySchema = z.object({
@@ -123,6 +137,20 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    const session = await authGuard();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: session.userId },
+      include: { role: true },
+    });
+
+    if (!user || user.role.name !== "ADMIN") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const body = await req.json();
     const validation = createGameSchema.safeParse(body);
 
@@ -153,7 +181,9 @@ export async function POST(req: Request) {
     });
 
     // Invalidate games cache
-    // revalidateTag('games');
+    revalidateTag("games", {});
+    revalidateTag("dashboard-admin", {});
+    revalidateTag("dashboard-user", {});
 
     return NextResponse.json({ game }, { status: 201 });
   } catch (error) {

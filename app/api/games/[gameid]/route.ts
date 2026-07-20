@@ -4,6 +4,18 @@ import { NextResponse } from "next/server";
 import { unstable_cache } from "next/cache";
 import { revalidateTag } from "next/cache";
 
+/**
+ * Game Detail API Route
+ *
+ * GET    /api/games/[gameid]     - Fetch game with relations (cached)
+ * DELETE /api/games/[gameid]     - Delete game (admin only)
+ *
+ * The DELETE endpoint:
+ * - Requires authenticated ADMIN user
+ * - Validates game exists before deletion
+ * - Revalidates dashboard-admin, dashboard-user, and game cache tags
+ */
+
 interface GameGenreWithName {
   id: number;
   game_id: number;
@@ -193,5 +205,47 @@ export const GET = async (
   }
 };
 
-// Note: Actual PATCH/DELETE handlers would go here and call revalidateTag('game')
-// For now, cache invalidation should be done in the actual mutation endpoints
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ gameid: string }> },
+) {
+  try {
+    const session = await authGuard();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: session.userId },
+      include: { role: true },
+    });
+
+    if (!user || user.role.name !== "ADMIN") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const { gameid } = await params;
+    const gameId = parseInt(gameid);
+
+    if (isNaN(gameId)) {
+      return NextResponse.json({ error: "Invalid game ID" }, { status: 400 });
+    }
+
+    // Check if game exists
+    const game = await prisma.game.findUnique({ where: { id: gameId } });
+    if (!game) {
+      return NextResponse.json({ error: "Game not found" }, { status: 404 });
+    }
+
+    await prisma.game.delete({ where: { id: gameId } });
+
+    revalidateTag("dashboard-admin", {});
+    revalidateTag("dashboard-user", {});
+    revalidateTag("game", {});
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Delete game error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
