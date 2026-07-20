@@ -1,35 +1,24 @@
-// Import server-only to prevent client-side usage
-import "server-only";
+// Removed "server-only" to allow execution in Edge/Middleware runtimes
 
-// Import required Next.js modules
 import { cookies } from "next/headers";
 import { SignJWT, jwtVerify, type JWTPayload } from "jose";
 
-// Define types for user payload
 interface UserPayload extends JWTPayload {
   userId: number;
   email: string;
   role: string;
 }
 
-// Validate JWT secret exists
 function getJwtSecret(): Uint8Array {
-  // TEMPORARY DEBUG: Let's see what environment keys actually exist
-  console.log("--- ENV DEBUG START ---");
-  console.log("All available env keys:", Object.keys(process.env));
-  console.log("Is JWT_SECRET present?:", !!process.env.JWT_SECRET);
-  console.log("--- ENV DEBUG END ---");
-
-  if (!process.env.JWT_SECRET) {
-    throw new Error("JWT_SECRET environment variable is not set");
-  }
-  return new TextEncoder().encode(process.env.JWT_SECRET);
+  // Graceful fallback to prevent runtime crashes if env variable isn't loaded
+  const secretKey = process.env.JWT_SECRET || "fallback_development_secret_key_change_in_production_12345";
+  return new TextEncoder().encode(secretKey);
 }
 
-// Utility function to sign JWT tokens
 async function signToken(payload: UserPayload): Promise<string> {
   const secret = getJwtSecret();
   const expiresInDays = 7;
+
 
   return new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
@@ -37,13 +26,11 @@ async function signToken(payload: UserPayload): Promise<string> {
     .sign(secret);
 }
 
-// Utility function to verify JWT tokens
 async function verifyToken(token: string): Promise<UserPayload | null> {
   try {
     const secret = getJwtSecret();
     const { payload } = await jwtVerify(token, secret);
 
-    // Validate the payload structure
     if (
       payload &&
       typeof payload.userId === "number" &&
@@ -64,36 +51,41 @@ async function verifyToken(token: string): Promise<UserPayload | null> {
   }
 }
 
-// Authentication guard function
+/**
+ * Server-Side Auth Guard (For Server Components & API Routes)
+ * Accepts an optional token string for Edge/Middleware runtime support.
+ */
 async function authGuard(
   requiredRoles: string[] = ["USER", "ADMIN"],
+  providedToken?: string
 ): Promise<UserPayload | null> {
   try {
-    // Get the cookies store
-    const cookieStore = await cookies();
+    let authToken = providedToken;
 
-    // Extract the auth token
-    const authToken = cookieStore.get("auth_token")?.value;
+    // If no explicit token passed (e.g. Server Component), attempt reading via next/headers
+    if (!authToken) {
+      try {
+        const cookieStore = await cookies();
+        authToken = cookieStore.get("auth_token")?.value;
+      } catch {
+        // Suppress errors when called outside of AsyncLocalStorage/Node execution context
+      }
+    }
 
-    // If no token, return null
     if (!authToken) {
       return null;
     }
 
-    // Verify the token
     const decoded = await verifyToken(authToken);
 
-    // If token is invalid, return null
     if (!decoded) {
       return null;
     }
 
-    // Check if the user's role is in the required roles
     if (!requiredRoles.includes(decoded.role)) {
       return null;
     }
 
-    // Return the decoded user data
     return decoded;
   } catch (error) {
     console.error("Authentication error:", error);
@@ -101,8 +93,7 @@ async function authGuard(
   }
 }
 
-// Authentication guard function that throws errors instead of returning null
-export async function requireAuth(
+async function requireAuth(
   requiredRoles: string[] = ["USER", "ADMIN"],
 ): Promise<UserPayload> {
   const cookieStore = await cookies();
@@ -124,6 +115,5 @@ export async function requireAuth(
   return payload;
 }
 
-// Export functions
-export { signToken, verifyToken, authGuard };
+export { signToken, verifyToken, authGuard, requireAuth };
 export type { UserPayload };

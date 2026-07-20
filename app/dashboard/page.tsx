@@ -19,7 +19,7 @@ export default async function DashboardPage(props: {
     include: { role: true },
   });
 
-  if (!user || user.role.name !== "ADMIN") {
+  if (!user || user.role.name !== "ADMIN") { 
     redirect("/");
   }
 

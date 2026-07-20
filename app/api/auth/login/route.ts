@@ -1,5 +1,3 @@
-"use server";
-
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
@@ -66,6 +64,7 @@ export async function POST(req: Request) {
       role: user.role.name
     });
 
+
     // Set auth cookie
     const cookieStore = await cookies();
     cookieStore.set({
@@ -76,6 +75,7 @@ export async function POST(req: Request) {
       sameSite: "strict",
       path: "/",
     });
+
 
     return NextResponse.json({
       success: true,

@@ -19,7 +19,7 @@ export default function JournalPage() {
   const [content, setContent] = useState('');
   const [recommended, setRecommended] = useState(true);
   const [gameId, setGameId] = useState<string | number>(''); 
-  const [rating, setRating] = useState(5); // Defaulting to 5 mid-point is standard practice
+  const [rating, setRating] = useState(5);
   
   // Dynamic user-submitted image field default
   const defaultThumbnail = 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=1200&q=80';
@@ -34,7 +34,9 @@ export default function JournalPage() {
   useEffect(() => {
     async function fetchGames() {
       try {
-        const res = await fetch('/api/games?limit=50&sort=title&order=asc');
+        const res = await fetch('/api/games?limit=50&sort=title&order=asc', {
+          credentials: 'include',
+        });
         if (!res.ok) throw new Error('Could not retrieve games database.');
         
         const data = await res.json();
@@ -69,14 +71,15 @@ export default function JournalPage() {
     setSuccess(false);
 
     try {
-      // Directs payload to your API handler
+      // Directs payload to your API handler with explicit cookie inclusion
       const response = await fetch('/api/reviews', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // Guarantees auth_token cookie is sent
         body: JSON.stringify({
           title: title.trim(),
           description: description.trim(),
-          body: content.trim(), // Stored as 'body' in the db reviewed profile feeds
+          body: content.trim(),
           recommended,
           game_id: Number(gameId),
           rating: Number(rating),
@@ -95,7 +98,7 @@ export default function JournalPage() {
       setContent('');
       
       setTimeout(() => {
-        router.push('/journal'); 
+        router.push('/reviews'); 
         router.refresh();
       }, 1500);
 
@@ -113,8 +116,8 @@ export default function JournalPage() {
         {/* Form Column */}
         <div className="bg-brand-surface border border-neutral-900 rounded-3xl p-6 shadow-2xl">
           <div className="mb-6">
-            <Link href="/journal" className="text-xs font-semibold uppercase tracking-[0.3em] text-brand-primary-button hover:underline">
-              ← Back to Journals
+            <Link href="/reviews" className="text-xs font-semibold uppercase tracking-[0.3em] text-brand-primary-button hover:underline">
+              ← Back to Reviews
             </Link>
             <h1 className="text-3xl font-headline font-bold text-white mt-2">Create Journal Entry</h1>
             <p className="text-gray-400 text-sm font-light mt-1">Document your thoughts, rating, and gameplay experience.</p>

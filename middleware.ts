@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { authGuard } from './lib/auth/authUtils';
+import { verifyToken } from '@/lib/auth/authUtils';
 
 const protectedRoutes = [
   '/profile',
@@ -10,16 +10,20 @@ const protectedRoutes = [
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
 
-  // Check if the route is protected
+  // Check if current route matches any protected prefix
   const isProtectedRoute = protectedRoutes.some(route =>
     path.startsWith(route)
   );
 
   if (isProtectedRoute) {
-    // Verify authentication
-    const user = await authGuard();
+    // 1. Extract cookie directly from NextRequest
+    const authToken = request.cookies.get('auth_token')?.value;
 
-    // If not authenticated, redirect to login
+    // 2. Direct verification without invoking next/headers
+    const user = authToken ? await verifyToken(authToken) : null;
+
+
+    // 3. Redirect to login if token is missing or invalid
     if (!user) {
       const loginUrl = new URL('/login', request.url);
       loginUrl.searchParams.set('from', path);
@@ -34,4 +38,4 @@ export const config = {
   matcher: [
     '/((?!api|_next/static|_next/image|favicon.ico|login|register).*)',
   ],
-}
+};
