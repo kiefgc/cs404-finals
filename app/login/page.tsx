@@ -2,11 +2,13 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useState, FormEvent } from 'react';
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const from = searchParams.get('from') || '/';
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -34,7 +36,7 @@ export default function LoginPage() {
         return;
       }
 
-      router.push('/');
+      router.push(from);
       router.refresh();
     } catch {
       setError('Network error. Please try again.');
