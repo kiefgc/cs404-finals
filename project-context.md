@@ -236,7 +236,44 @@ _ Resolved all TypeScript/Zod API validation types and route handler schema mism
 
 [ ] Prompt 5: Dynamic Game View & Library Integrations (/games/[gameid]).
 
-[ ] Prompt 6: Role-Restricted Portals & Metrics Dashboard (/dashboard).
+[x] **Prompt 6: Role-Restricted Portals & Metrics Dashboard (/dashboard) - COMPLETE**
+
+- **Fully implemented admin dashboard** with URL-driven tab navigation
+- **Server Component (`app/dashboard/page.tsx`)**:
+  - Authenticates and authorizes ADMIN users only via `authGuard`
+  - Reads active tab from URL search params (`?tab=users|games|reviews`)
+  - Dynamically fetches only the active tab's data (no over-fetching)
+  - Disables caching (`revalidate = 0`) for real-time admin data
+  - Passes initial data + `activeTab` to client component
+- **Client Component (`components/dashboard-client.tsx`)**:
+  - Manages local state for all three tabs independently
+  - Provides optimistic UI updates with loading states
+  - **User Management**: Make Admin (POST `/api/admin/make-admin`), Delete User (DELETE `/api/admin/delete-user`)
+  - **Game Management**: Add Game modal (POST `/api/games`), Delete Game (DELETE `/api/games/[gameid]`)
+  - **Review Moderation**: Delete Review (DELETE `/api/admin/delete-review`)
+  - All mutations revalidate server cache tags for instant UI consistency
+  - **Genre Management**: Dynamic genre fetching from `/api/genres`, Add Genre modal (POST `/api/genres`)
+
+**New API Routes Added:**
+- `POST /api/admin/make-admin` - Promote user to ADMIN (admin only)
+- `DELETE /api/admin/delete-user` - Delete user account (admin only, prevents self-delete)
+- `DELETE /api/admin/delete-review` - Archive/remove review (admin only)
+- `POST /api/games` - Create new game in library (admin only, with genre associations)
+- `DELETE /api/games/[gameid]` - Delete game from library (admin only)
+- `GET/POST /api/genres` - List all genres / Create new genre (admin only for POST)
+
+**Cache Invalidation Strategy:**
+- `dashboard-admin` - Admin view metrics and lists
+- `dashboard-user` - User-facing counts
+- `dashboard-reviews` - Review lists
+- `games` / `games-[id]` - Game catalog and detail pages
+- `genres` - Genre list for game creation modal
+
+**Key Fixes Applied:**
+- **Doubled windows issue**: Server component controls active tab via URL params; client component receives `activeTab` prop and renders only that tab
+- **Genre FK constraint**: Seeded all 8 default genres (Action, Adventure, RPG, Strategy, Simulation, Sports, Horror, Puzzle) in `prisma/seed.ts`; client fetches genres dynamically from API
+- **Next.js 16 `revalidateTag`**: Fixed to use 2-argument form (`revalidateTag("tag", {})`)
+- **Login page Suspense**: Added Suspense boundary for `useSearchParams()` in `app/login/page.tsx` — split into `page.tsx` (server + Suspense) + `login-form.tsx` (client) to push client boundary to the leaves
 
 ## 5. Sequential Engineering Execution Prompts
 
