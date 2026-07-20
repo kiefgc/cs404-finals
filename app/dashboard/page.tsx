@@ -46,6 +46,8 @@ export default async function DashboardPage({
   ]);
 
   let tabData: any[] = [];
+  let genres: { id: number; name: string }[] = [];
+
   if (activeTab === "users") {
     tabData = await prisma.user.findMany({
       orderBy: { created_at: "desc" },
@@ -54,6 +56,18 @@ export default async function DashboardPage({
   } else if (activeTab === "games") {
     tabData = await prisma.game.findMany({
       orderBy: { created_at: "desc" },
+      include: {
+        game_genres: {
+          include: {
+            genre: true,
+          },
+        },
+      },
+    });
+    // Fetch all genres for the add game modal
+    genres = await prisma.genre.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
     });
   } else if (activeTab === "reviews") {
     tabData = await prisma.review.findMany({
@@ -141,6 +155,7 @@ export default async function DashboardPage({
           initialUsers={activeTab === "users" ? tabData : []}
           initialGames={activeTab === "games" ? tabData : []}
           initialReviews={activeTab === "reviews" ? tabData : []}
+          initialGenres={genres}
           activeTab={activeTab as "users" | "games" | "reviews"}
         />
       </div>

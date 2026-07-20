@@ -34,6 +34,7 @@ const createGameSchema = z.object({
   release_date: z.string().optional(),
   cover_image: z.string().url().optional(),
   genre_ids: z.array(z.number().int()).optional(),
+  rating: z.number().min(1).max(10).optional(),
 });
 
 // Cached query function - keyed by search params
@@ -161,7 +162,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const { title, description, release_date, cover_image, genre_ids } = validation.data;
+    const { title, description, release_date, cover_image, genre_ids, rating } = validation.data;
 
     const game = await prisma.game.create({
       data: {
@@ -169,6 +170,7 @@ export async function POST(req: Request) {
         description,
         release_date: release_date ? new Date(release_date) : new Date(),
         cover_image,
+        rating_avg: rating ?? undefined,
         game_genres: {
           create: genre_ids?.map(genre_id => ({
             genre: { connect: { id: genre_id } }

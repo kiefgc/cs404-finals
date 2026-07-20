@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 /**
  * DashboardClient - Client-side component for the admin dashboard
@@ -19,6 +20,7 @@ import { useState, useEffect } from "react";
  * @param initialUsers - Pre-fetched user list (only when activeTab === "users")
  * @param initialGames - Pre-fetched game list (only when activeTab === "games")
  * @param initialReviews - Pre-fetched review list (only when activeTab === "reviews")
+ * @param initialGenres - Pre-fetched genre list
  * @param activeTab - Current active tab from URL (server-controlled)
  */
 type DashboardClientProps = {
@@ -26,6 +28,7 @@ type DashboardClientProps = {
   initialUsers: any[];
   initialGames: any[];
   initialReviews: any[];
+  initialGenres: { id: number; name: string }[];
   activeTab: "users" | "games" | "reviews";
 };
 
@@ -34,11 +37,14 @@ export default function DashboardClient({
   initialUsers,
   initialGames,
   initialReviews,
+  initialGenres,
   activeTab,
 }: DashboardClientProps) {
+  const router = useRouter();
   const [users, setUsers] = useState(initialUsers);
   const [games, setGames] = useState(initialGames);
   const [reviews, setReviews] = useState(initialReviews);
+  const [statsState, setStatsState] = useState(stats);
   const [loading, setLoading] = useState<{ [key: string]: boolean }>({});
   const [showAddGameModal, setShowAddGameModal] = useState(false);
   const [showAddGenreModal, setShowAddGenreModal] = useState(false);
@@ -49,16 +55,9 @@ export default function DashboardClient({
     release_date: "",
     cover_image: "",
     genre_ids: [] as number[],
+    rating: undefined as number | undefined,
   });
-  const [genres, setGenres] = useState<{ id: number; name: string }[]>([]);
-
-  // Fetch genres on mount
-  useEffect(() => {
-    fetch("/api/genres")
-      .then((res) => res.json())
-      .then((data) => setGenres(data.genres || []))
-      .catch(console.error);
-  }, []);
+  const [genres, setGenres] = useState<{ id: number; name: string }[]>(initialGenres);
 
   // Sync with server data when activeTab changes
   useEffect(() => {
@@ -113,6 +112,8 @@ export default function DashboardClient({
         body: JSON.stringify({ targetId: userId }),
       });
       setUsers((prev) => prev.filter((u) => u.id !== userId));
+      setStatsState((prev) => ({ ...prev, totalUsers: prev.totalUsers - 1 }));
+      router.refresh();
     } catch (error) {
       alert(error instanceof Error ? error.message : "Failed to delete user");
     } finally {
@@ -130,6 +131,8 @@ export default function DashboardClient({
         body: JSON.stringify({ targetId: reviewId }),
       });
       setReviews((prev) => prev.filter((r) => r.id !== reviewId));
+      setStatsState((prev) => ({ ...prev, totalReviews: prev.totalReviews - 1 }));
+      router.refresh();
     } catch (error) {
       alert(error instanceof Error ? error.message : "Failed to delete review");
     } finally {
@@ -146,6 +149,8 @@ export default function DashboardClient({
         method: "DELETE",
       });
       setGames((prev) => prev.filter((g) => g.id !== gameId));
+      setStatsState((prev) => ({ ...prev, totalGames: prev.totalGames - 1 }));
+      router.refresh();
     } catch (error) {
       alert(error instanceof Error ? error.message : "Failed to delete game");
     } finally {
@@ -164,6 +169,7 @@ export default function DashboardClient({
         release_date: newGame.release_date || new Date().toISOString(),
         cover_image: newGame.cover_image || undefined,
         genre_ids: newGame.genre_ids.length > 0 ? newGame.genre_ids : undefined,
+        rating: newGame.rating,
       };
       const result = await apiCall("/api/games", {
         method: "POST",
@@ -172,6 +178,7 @@ export default function DashboardClient({
       // Add new game to local state
       if (result.game) {
         setGames((prev) => [result.game, ...prev]);
+        setStatsState((prev) => ({ ...prev, totalGames: prev.totalGames + 1 }));
       }
       setShowAddGameModal(false);
       setNewGame({
@@ -180,7 +187,9 @@ export default function DashboardClient({
         release_date: "",
         cover_image: "",
         genre_ids: [],
+        rating: undefined,
       });
+      router.refresh();
     } catch (error) {
       alert(error instanceof Error ? error.message : "Failed to add game");
     } finally {
@@ -214,6 +223,7 @@ export default function DashboardClient({
         setNewGenreName("");
       }
       setShowAddGenreModal(false);
+      router.refresh();
     } catch (error) {
       alert(error instanceof Error ? error.message : "Failed to add genre");
     } finally {
@@ -529,6 +539,22 @@ export default function DashboardClient({
                   + Add New Genre
                 </button>
               )}
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">
+                Rating (1-10)
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="10"
+                step="0.1"
+                value={newGame.rating ?? ""}
+                onChange={(e) =>
+                  setNewGame({ ...newGame, rating: e.target.value ? parseFloat(e.target.value) : undefined })
+                }
+                className="w-full bg-white text-black px-4 py-3 rounded-sm focus:outline-none focus:ring-2 focus:ring-brand-primary-button transition"
+              />
             </div>
             <div className="flex gap-4 pt-4 border-t border-white/10">
               <button
