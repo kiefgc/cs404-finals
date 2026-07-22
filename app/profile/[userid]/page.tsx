@@ -35,8 +35,12 @@ async function getProfileData(userIdStr: string) {
     // 1. Fetch user, metadata counts, and Role safely
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      include: {
-        role: true, 
+      select: {
+        id: true,
+        name: true,
+        profile_pic: true,
+        bio: true,
+        role: true,
         _count: {
           select: {
             saved_games: true,
@@ -114,8 +118,9 @@ async function getProfileData(userIdStr: string) {
       profileUser: {
         user_id: user.id,
         name: user.name || 'Anonymous Player',
-        role: user.role?.name || 'USER', 
+        role: user.role?.name || 'USER',
         bio: user.bio || 'This player has not set up a bio yet.',
+        profile_pic: user.profile_pic,
         gamesCount: user._count.saved_games,
         reviewsCount: user._count.reviews,
         followersCount: followersCount,
@@ -156,9 +161,19 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
         <div className="space-y-6">
             <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
               <div className="flex items-center gap-5">
-                <div className="flex h-28 w-28 items-center justify-center rounded-3xl bg-brand-tertiary border border-white/10 text-4xl font-bold text-brand-primary-button">
-                  {initials}
-                </div>
+                {profileUser.profile_pic && profileUser.profile_pic.trim() !== "" ? (
+                  <img
+                    src={profileUser.profile_pic}
+                    alt={`${profileUser.name}'s profile`}
+                    width={112}
+                    height={112}
+                    className="rounded-3xl object-cover border-2 border-brand-primary-button"
+                  />
+                ) : (
+                  <div className="flex h-28 w-28 items-center justify-center rounded-3xl bg-brand-tertiary border border-white/10 text-4xl font-bold text-brand-primary-button">
+                    {initials}
+                  </div>
+                )}
                 <div className="space-y-2">
                   <h1 className="font-headline text-4xl text-white font-bold tracking-tight">{profileUser.name}</h1>
                   <p className="text-sm text-gray-300 max-w-2xl leading-relaxed">{profileUser.role}</p>
