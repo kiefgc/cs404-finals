@@ -66,7 +66,7 @@ export const POST = withAuth(async (
     return NextResponse.json({ success: true, saved });
 
   } catch (error) {
-    console.error("Error toggling game save:", error);
+   console.error("Error toggling game save:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

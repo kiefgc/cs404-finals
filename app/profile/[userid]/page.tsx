@@ -1,14 +1,30 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { cookies } from 'next/headers';
 import GameCard from '@/components/gamecard';
 import ReviewCard from '@/components/reviewcard';
 import { prisma } from '@/lib/prisma';
 import { Game, Review } from '@/types';
+import { verifyToken } from '@/lib/auth/authUtils';
 
 export const revalidate = 0;
 
 interface ProfilePageProps {
   params: Promise<{ userid: string }>;
+}
+
+async function getCurrentUserId(): Promise<number | null> {
+  const cookieStore = await cookies();
+  const authToken = cookieStore.get("auth_token")?.value;
+
+  if (!authToken) return null;
+
+  try {
+    const payload = await verifyToken(authToken);
+    return payload?.userId ?? null;
+  } catch {
+    return null;
+  }
 }
 
 async function getProfileData(userIdStr: string) {
@@ -115,6 +131,10 @@ async function getProfileData(userIdStr: string) {
 
 export default async function ProfilePage({ params }: ProfilePageProps) {
   const { userid } = await params;
+  const profileUserId = parseInt(userid, 10);
+  const currentUserId = await getCurrentUserId();
+  const isOwnProfile = currentUserId === profileUserId;
+
   const data = await getProfileData(userid);
 
   if (!data) notFound();
@@ -146,12 +166,14 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
               </div>
 
               <div className="flex flex-wrap items-center gap-3">
-                <span
-                  className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-5 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-gray-400 cursor-not-allowed"
-                  title="Edit profile coming soon"
-                >
-                  Edit Profile
-                </span>
+                {isOwnProfile && (
+                  <Link
+                    href={`/profile/${userid}/edit`}
+                    className="inline-flex items-center justify-center rounded-full border border-brand-primary-button bg-brand-primary-button/10 px-5 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-brand-primary-button hover:bg-brand-primary-button/20 transition-colors"
+                  >
+                    Edit Profile
+                  </Link>
+                )}
               </div>
             </div>
 
