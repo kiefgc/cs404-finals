@@ -50,12 +50,13 @@ async function getHomeData() {
   // 4. Map dbReviews safely to prevent title crashes if a relation is missing
   const reviews: Review[] = dbReviews.map((review) => ({
     review_id: review.id,
-    game_title: review.game?.title || 'Unknown Game', // Fixed: Prevents undefined crash
+    game_title: review.game?.title || 'Unknown Game',
     review_title: review.title,
     body: review.body,
     rating: review.rating,
     recommended: review.recommended,
     date_created: review.created_at.toISOString(),
+    game_cover_image: review.game?.cover_image || null,
   }));
 
   return { games, reviews };
@@ -89,11 +90,21 @@ export default async function Home() {
               </Link>
             </div>
           </div>
-          <div className="w-full md:w-80 aspect-video md:aspect-square bg-brand-bg rounded border border-white/5 flex flex-col items-center justify-center p-6 text-center text-xs text-gray-500 font-mono shadow-inner gap-2">
-            <span className="text-gray-400 font-headline text-base font-medium">{featuredReview.game_title}</span>
-            <span className="text-[10px] uppercase text-brand-primary-button tracking-wider font-bold">
-              {featuredReview.recommended ? '★ Recommended' : '★ Not Recommended'}
-            </span>
+          <div className="w-full md:w-80 aspect-video md:aspect-square bg-brand-bg rounded border border-white/5 relative overflow-hidden shadow-inner">
+            {featuredReview.game_cover_image ? (
+              <img
+                src={featuredReview.game_cover_image}
+                alt={`${featuredReview.game_title} cover`}
+                className="w-full h-full object-cover opacity-70"
+              />
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center text-xs text-gray-500 font-mono">
+                <span className="text-gray-400 font-headline text-base font-medium">{featuredReview.game_title}</span>
+                <span className="text-[10px] uppercase text-brand-primary-button tracking-wider font-bold">
+                  {featuredReview.recommended ? '★ Recommended' : '★ Not Recommended'}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       ) : (

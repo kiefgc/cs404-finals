@@ -47,13 +47,6 @@ export default function ReviewCard({ review: critique, compact = false }: Review
   return (
     <Link href={`/reviews/${critique.review_id}`} className="group block w-full">
       <div className="bg-brand-surface rounded border border-white/5 overflow-hidden transition-all duration-300 group-hover:border-brand-primary-button/30 group-hover:scale-[1.01] shadow-md flex flex-col h-full">
-        
-        {/* Visual Content Block */}
-        <div className="relative aspect-video w-full bg-gradient-to-b from-brand-tertiary/10 to-brand-bg flex items-center justify-center p-4">
-          <span className="text-gray-700 font-mono text-[10px] uppercase tracking-widest text-center opacity-40">
-            {displayGameTitle}
-          </span>
-        </div>
 
         {/* Review Information Block */}
         <div className="p-5 space-y-3 flex-1 flex flex-col">
