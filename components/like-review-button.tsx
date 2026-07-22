@@ -3,13 +3,13 @@
 import { useState } from 'react';
 
 interface LikeReviewButtonProps {
-  reviewId: string | number; // or number, depending on your schema
-  initialLikes?: number; // Marked as optional for safety
+  reviewId: string | number;
+  initialLikes?: number;
+  initialLiked?: boolean;
 }
 
-export default function LikeReviewButton({ reviewId, initialLikes }: LikeReviewButtonProps) {
-  const [liked, setLiked] = useState(false);
-  // Fallback to 0 if initialLikes is undefined or null
+export default function LikeReviewButton({ reviewId, initialLikes, initialLiked }: LikeReviewButtonProps) {
+  const [liked, setLiked] = useState(initialLiked ?? false);
   const [count, setCount] = useState(initialLikes ?? 0);
 
   async function toggleReviewLike() {

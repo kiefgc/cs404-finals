@@ -5,12 +5,13 @@ import { useState } from 'react';
 interface ReviewActionButtonsProps {
   reviewId: number;
   initialLikes?: number; // Change to optional just in case it is undefined/null
+  initialLiked?: boolean;
 }
 
-export default function ReviewActionButtons({ reviewId, initialLikes }: ReviewActionButtonsProps) {
+export default function ReviewActionButtons({ reviewId, initialLikes, initialLiked }: ReviewActionButtonsProps) {
   // Use nullish coalescing to fall back to 0 if initialLikes is undefined or null
   const [likesCount, setLikesCount] = useState(initialLikes ?? 0);
-  const [liked, setLiked] = useState(false);
+  const [liked, setLiked] = useState(initialLiked ?? false);
 
   async function toggleLike() {
     try {
