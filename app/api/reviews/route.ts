@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth/routeHandler";
 import { z } from "zod";
 import { unstable_cache } from "next/cache";
-import { revalidatePath } from "next/cache";
+import { revalidateTag } from "next/cache";
 
 // Validation schema for the reviews feed
 const querySchema = z.object({
@@ -246,7 +246,7 @@ export const POST = withAuth(
       });
 
       // Invalidate reviews cache
-      revalidatePath('/reviews');
+      revalidateTag('reviews');
 
       // Format the response
       const formattedReview = {
