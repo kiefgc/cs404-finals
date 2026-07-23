@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import LikeReviewButton from './like-review-button';
+import DeleteReviewButton from './delete-review-button';
 
 interface Review {
   id: string;
@@ -242,6 +243,11 @@ export default function ReviewsPageClient({ initialReviews, nextCursor, currentU
                     reviewId={review.id}
                     initialLikes={review.likes_count}
                     initialLiked={review.liked_by_current_user}
+                  />
+                  <DeleteReviewButton
+                    reviewId={review.id}
+                    isOwner={Number(review.user.id) === currentUserId}
+                    onDelete={() => setReviews((prev) => prev.filter((r) => r.id !== review.id))}
                   />
                 </div>
                 <Link

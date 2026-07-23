@@ -1,12 +1,18 @@
+'use client';
+
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Review } from '@/types';
+import DeleteReviewButton from '@/components/delete-review-button';
 
 interface ReviewCardProps {
   review: Review;
   compact?: boolean;
+  currentUserId?: number;
 }
 
-export default function ReviewCard({ review: critique, compact = false }: ReviewCardProps) {
+export default function ReviewCard({ review: critique, compact = false, currentUserId }: ReviewCardProps) {
+  const router = useRouter();
   // 1. Safe date fallback to prevent crashing on missing dates
   const reviewDate = critique.date_created ? new Date(critique.date_created) : new Date();
   const formattedDate = reviewDate.toLocaleDateString('en-US', {
@@ -69,6 +75,12 @@ export default function ReviewCard({ review: critique, compact = false }: Review
           <div className="text-[10px] text-gray-500 uppercase tracking-wider font-bold border-t border-white/5 pt-3">
             {formattedDate}
           </div>
+
+          <DeleteReviewButton
+            reviewId={critique.review_id}
+            isOwner={currentUserId === critique.user_id}
+            onDelete={() => router.refresh()}
+          />
         </div>
       </div>
     </Link>

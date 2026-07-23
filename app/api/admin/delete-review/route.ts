@@ -36,7 +36,11 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "Invalid targetId" }, { status: 400 });
     }
 
-    await prisma.review.delete({ where: { id: targetId } });
+    // Soft-delete (archive) the review instead of hard delete
+    await prisma.review.update({
+      where: { id: targetId },
+      data: { is_archived: true },
+    });
 
     revalidateTag("dashboard-reviews", {});
     revalidateTag("dashboard-admin", {});

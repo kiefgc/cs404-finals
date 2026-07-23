@@ -278,6 +278,8 @@ export default async function ReviewDetailPage({ params }: PageProps) {
             reviewId={review.id}
             initialLikes={review.likes_count}
             initialLiked={likedByCurrentUser}
+            isOwner={Number(review.user?.id) === userId}
+            currentUserId={userId}
 />
         </section>
 

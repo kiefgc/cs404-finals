@@ -39,4 +39,5 @@ export interface Review {
   date_created?: string;
   likes_count?: number;
   game_cover_image?: string | null;
+  is_archived?: boolean;
 }

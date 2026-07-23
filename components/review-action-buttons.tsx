@@ -1,14 +1,26 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import LikeReviewButton from './like-review-button';
+import DeleteReviewButton from './delete-review-button';
 
 interface ReviewActionButtonsProps {
   reviewId: number;
-  initialLikes?: number; // Change to optional just in case it is undefined/null
+  initialLikes?: number;
   initialLiked?: boolean;
+  isOwner?: boolean;
+  currentUserId?: number;
 }
 
-export default function ReviewActionButtons({ reviewId, initialLikes, initialLiked }: ReviewActionButtonsProps) {
+export default function ReviewActionButtons({
+  reviewId,
+  initialLikes,
+  initialLiked,
+  isOwner = false,
+  currentUserId
+}: ReviewActionButtonsProps) {
+  const router = useRouter();
   // Use nullish coalescing to fall back to 0 if initialLikes is undefined or null
   const [likesCount, setLikesCount] = useState(initialLikes ?? 0);
   const [liked, setLiked] = useState(initialLiked ?? false);
@@ -19,7 +31,7 @@ export default function ReviewActionButtons({ reviewId, initialLikes, initialLik
       if (!res.ok) return;
       const data = await res.json();
       setLiked(data.liked);
-      setLikesCount(data.likes_count ?? 0); // Safe fallback
+      setLikesCount(data.likes_count ?? 0);
     } catch {
       // silently fail
     }
@@ -36,10 +48,14 @@ export default function ReviewActionButtons({ reviewId, initialLikes, initialLik
     alert('Report submitted. Our team will review this content.');
   };
 
+  const handleDeleteComplete = () => {
+    router.refresh();
+  };
+
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
       {/* LIKE CARD */}
-      <button 
+      <button
         onClick={toggleLike}
         className={`bg-brand-surface border rounded-lg p-4 text-center transition group shadow-md cursor-pointer ${
           liked ? 'border-brand-primary-button/30 bg-brand-primary-button/10' : 'border-white/5 hover:border-brand-primary-button/30'
@@ -49,7 +65,6 @@ export default function ReviewActionButtons({ reviewId, initialLikes, initialLik
           {liked ? '❤️' : '👍'}
         </div>
         <div className="text-sm font-mono font-bold text-brand-primary-button">
-          {/* Safe check prevents toLocaleString from throwing an error */}
           {(likesCount ?? 0).toLocaleString()}
         </div>
         <div className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mt-1">
@@ -58,7 +73,7 @@ export default function ReviewActionButtons({ reviewId, initialLikes, initialLik
       </button>
 
       {/* SHARE CARD */}
-      <button 
+      <button
         onClick={handleShare}
         className="bg-brand-surface border border-white/5 hover:border-brand-primary-button/30 rounded-lg p-4 text-center transition group shadow-md cursor-pointer"
       >
@@ -72,7 +87,7 @@ export default function ReviewActionButtons({ reviewId, initialLikes, initialLik
       </button>
 
       {/* REPORT CARD */}
-      <button 
+      <button
         onClick={handleReport}
         className="bg-brand-surface border border-white/5 hover:border-red-500/30 rounded-lg p-4 text-center transition group shadow-md cursor-pointer"
       >
@@ -84,6 +99,15 @@ export default function ReviewActionButtons({ reviewId, initialLikes, initialLik
           Inappropriate
         </div>
       </button>
+
+      {/* DELETE/ARCHIVE CARD - Only for owner */}
+      {isOwner && currentUserId && (
+        <DeleteReviewButton
+          reviewId={reviewId}
+          isOwner={isOwner}
+          onDelete={handleDeleteComplete}
+        />
+      )}
     </div>
   );
 }

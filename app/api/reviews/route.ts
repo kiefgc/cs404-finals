@@ -7,7 +7,7 @@ import { revalidateTag } from "next/cache";
 
 // Validation schema for the reviews feed
 const querySchema = z.object({
-  limit: z.coerce.number().min(1).max(20).optional().default(5),
+  limit: z.coerce.number().min(1).max(20).optional().default(6),
   cursor: z.string().optional(), // Cursor-based pagination
   game: z.string().optional(),
   user: z.coerce.number().optional(),
@@ -26,7 +26,14 @@ const createReviewSchema = z.object({
 
 // Cached query function - keyed by query parameters
 const getReviewsCached = unstable_cache(
-  async (limit: number, cursor: string | undefined, game: string | undefined, user: number | undefined, sort: string, userId: number | undefined) => {
+  async (
+    limit: number,
+    cursor: string | undefined,
+    game: string | undefined,
+    user: number | undefined,
+    sort: string,
+    userId: number | undefined,
+  ) => {
     const whereClause: any = { is_archived: false };
 
     if (game) {
@@ -99,14 +106,14 @@ const getReviewsCached = unstable_cache(
         where: {
           user_id: userId,
           review_id: {
-            in: reviews.map(r => r.id),
+            in: reviews.map((r) => r.id),
           },
         },
         select: {
           review_id: true,
         },
       });
-      likedReviewIds = new Set(likes.map(l => l.review_id));
+      likedReviewIds = new Set(likes.map((l) => l.review_id));
     }
 
     return {
@@ -138,8 +145,8 @@ const getReviewsCached = unstable_cache(
       nextCursor,
     };
   },
-  ['reviews-feed'],
-  { tags: ['reviews'], revalidate: 60 }
+  ["reviews-feed"],
+  { tags: ["reviews"], revalidate: 60 },
 );
 
 export async function GET(req: Request) {
@@ -157,7 +164,14 @@ export async function GET(req: Request) {
 
     const { limit, cursor, game, user, sort, userId } = validation.data;
 
-    const result = await getReviewsCached(limit, cursor, game, user, sort, userId);
+    const result = await getReviewsCached(
+      limit,
+      cursor,
+      game,
+      user,
+      sort,
+      userId,
+    );
 
     return NextResponse.json(result);
   } catch (error) {
@@ -246,7 +260,7 @@ export const POST = withAuth(
       });
 
       // Invalidate reviews cache
-      revalidateTag('reviews');
+      revalidateTag("reviews", {});
 
       // Format the response
       const formattedReview = {

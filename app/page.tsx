@@ -3,11 +3,12 @@ import GameCard from '@/components/gamecard';
 import ReviewCard from '@/components/reviewcard';
 import { prisma } from '@/lib/prisma';
 import { Game, Review } from '@/types';
+import { authGuard } from '@/lib/auth/authUtils';
 
 // Force dynamic rendering so database updates show immediately
 export const revalidate = 0;
 
-async function getHomeData() {
+async function getHomeData(currentUserId?: number) {
   // 1. Fetch 6 most recent games (including their genre connections)
   const dbGames = await prisma.game.findMany({
     orderBy: { created_at: 'desc' },
@@ -50,6 +51,7 @@ async function getHomeData() {
   // 4. Map dbReviews safely to prevent title crashes if a relation is missing
   const reviews: Review[] = dbReviews.map((review) => ({
     review_id: review.id,
+    user_id: review.user_id,
     game_title: review.game?.title || 'Unknown Game',
     review_title: review.title,
     body: review.body,
@@ -63,7 +65,9 @@ async function getHomeData() {
 }
 
 export default async function Home() {
-  const { games, reviews } = await getHomeData();
+  const session = await authGuard();
+  const currentUserId = session?.userId;
+  const { games, reviews } = await getHomeData(currentUserId);
 
   // Pick the absolute newest review as the "Hottest" featured review
   const featuredReview = reviews[0];
@@ -128,7 +132,7 @@ export default async function Home() {
         {reviews.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8">
             {reviews.slice(0, 6).map((review) => (
-              <ReviewCard key={review.review_id} review={review} />
+              <ReviewCard key={review.review_id} review={review} currentUserId={currentUserId} />
             ))}
           </div>
         ) : (
