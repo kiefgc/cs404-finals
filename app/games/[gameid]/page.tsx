@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
+import { authGuard } from '@/lib/auth/authUtils';
+import SaveGameButton from '@/components/save-game-button';
 
 export const revalidate = 0; // Ensure data stays fresh
 
@@ -8,7 +10,7 @@ interface GamePageProps {
   params: Promise<{ gameid: string }>;
 }
 
-async function getGameDetails(gameIdStr: string) {
+async function getGameDetails(gameIdStr: string, userId?: number) {
   const gameId = parseInt(gameIdStr, 10);
   if (isNaN(gameId)) return null;
 
@@ -42,9 +44,21 @@ async function getGameDetails(gameIdStr: string) {
 
   if (!game) return null;
 
+  // Check if game is saved for this user
+  let isSaved = false;
+  if (userId) {
+    const savedGame = await prisma.savedGame.findFirst({
+      where: {
+        user_id: userId,
+        game_id: gameId,
+      },
+    });
+    isSaved = !!savedGame;
+  }
+
   // Defensive scale logic: If raw rating is <= 5, scale it to 10. Otherwise, preserve its scale.
-  const displayRating = game.rating_avg <= 5 
-    ? (game.rating_avg * 2).toFixed(1) 
+  const displayRating = game.rating_avg <= 5
+    ? (game.rating_avg * 2).toFixed(1)
     : game.rating_avg.toFixed(1);
 
   return {
@@ -82,12 +96,18 @@ async function getGameDetails(gameIdStr: string) {
         likes_count: review._count?.likes || 0,
       };
     }),
+    isSaved,
   };
 }
 
 export default async function GameDetailPage({ params }: GamePageProps) {
   const { gameid } = await params;
-  const game = await getGameDetails(gameid);
+
+  // Get current user session
+  const session = await authGuard();
+  const userId = session?.userId;
+
+  const game = await getGameDetails(gameid, userId);
 
   if (!game) notFound();
 
@@ -112,7 +132,7 @@ export default async function GameDetailPage({ params }: GamePageProps) {
         {/* Hero Content (Restricted inside bounds safely above background) */}
         <div className="relative z-10 mx-auto max-w-7xl px-6 py-12 md:px-12 md:py-20">
           <div className="grid grid-cols-1 gap-8 lg:grid-cols-3 lg:items-end">
-            
+
             {/* Left Column: Context Metadata & Info */}
             <div className="lg:col-span-2 space-y-5">
               <div className="flex flex-wrap items-center gap-3 text-xs font-semibold tracking-widest text-gray-400">
@@ -142,9 +162,10 @@ export default async function GameDetailPage({ params }: GamePageProps) {
               </div>
 
               {/* Action Button */}
-              <button className="w-full max-w-[170px] rounded bg-[#a8cca4] py-3 text-center text-xs font-bold uppercase tracking-widest text-brand-bg transition duration-200 hover:bg-[#bce0b8] hover:shadow-lg hover:shadow-emerald-950/20">
-                Add to Library
-              </button>
+              <SaveGameButton
+                gameId={game.id.toString()}
+                initialSaved={game.isSaved}
+              />
             </div>
 
           </div>

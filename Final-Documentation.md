@@ -35,21 +35,23 @@ interface UserPayload extends JWTPayload {
 
 #### Functions
 
-| Function | Description |
-|----------|-------------|
-| `getJwtSecret(): Uint8Array` | Returns the JWT signing secret (with fallback for development) |
-| `signToken(payload: UserPayload): Promise<string>` | Creates a signed JWT token (HS256, 7-day expiry) |
-| `verifyToken(token: string): Promise<UserPayload \| null>` | Verifies and decodes a JWT token |
+| Function                                                                  | Description                                                                              |
+| ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `getJwtSecret(): Uint8Array`                                              | Returns the JWT signing secret (with fallback for development)                           |
+| `signToken(payload: UserPayload): Promise<string>`                        | Creates a signed JWT token (HS256, 7-day expiry)                                         |
+| `verifyToken(token: string): Promise<UserPayload \| null>`                | Verifies and decodes a JWT token                                                         |
 | `authGuard(requiredRoles?, providedToken?): Promise<UserPayload \| null>` | Validates auth token, checks roles. Supports optional explicit token for Edge/Middleware |
-| `requireAuth(requiredRoles?): Promise<UserPayload>` | Throws on auth failure (stricter than authGuard) |
+| `requireAuth(requiredRoles?): Promise<UserPayload>`                       | Throws on auth failure (stricter than authGuard)                                         |
 
 #### Key Features
+
 - **Flexible runtime**: Works in Node.js, Edge, and Middleware contexts
 - **Role-based access**: Supports role checking via `requiredRoles` parameter (default: `["USER", "ADMIN"]`)
 - **Token sources**: Reads from cookies (`auth_token`) or accepts explicit token parameter
 - **Graceful errors**: `authGuard` returns `null` on failure; `requireAuth` throws errors
 
 #### JWT Configuration
+
 - Algorithm: HS256
 - Expiration: 7 days
 - Secret: From `JWT_SECRET` env var (with dev fallback)
@@ -63,9 +65,11 @@ interface UserPayload extends JWTPayload {
 #### Actions
 
 ##### `registerUser(formData: FormData)`
+
 Registers a new user with validation.
 
 **Validation Schema**:
+
 ```typescript
 registerSchema = z.object({
   email: z.string().email(),
@@ -74,10 +78,11 @@ registerSchema = z.object({
   handle: z.string().min(2),
   bio: z.string().optional(),
   location: z.string().optional(),
-})
+});
 ```
 
 **Process**:
+
 1. Validates input with Zod
 2. Checks for existing email/handle (case-insensitive)
 3. Hashes password with bcrypt (cost: 12)
@@ -86,17 +91,20 @@ registerSchema = z.object({
 6. Returns `{ success: true }` or `{ success: false, error: string }`
 
 ##### `loginUser(formData: FormData)`
+
 Authenticates user and sets auth cookie.
 
 **Validation Schema**:
+
 ```typescript
 loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
-})
+});
 ```
 
 **Process**:
+
 1. Validates input
 2. Finds user by email (includes role relation)
 3. Verifies password against bcrypt hash in `supabase_id`
@@ -105,9 +113,11 @@ loginSchema = z.object({
 6. Returns `{ success: true }` or `{ success: false, error: string }`
 
 ##### `logoutUser()`
+
 Clears auth cookie and redirects to home.
 
 **Process**:
+
 1. Sets `auth_token` cookie to expired (Date(0))
 2. Redirects to `/`
 
@@ -120,44 +130,54 @@ Clears auth cookie and redirects to home.
 #### Functions
 
 ##### `withAuth(handler, requiredRoles?)`
+
 Wraps an API route handler with authentication.
 
 ```typescript
 withAuth(
-  async (req, user, context) => { /* handler logic */ },
-  ["USER", "ADMIN"] // optional roles
-)
+  async (req, user, context) => {
+    /* handler logic */
+  },
+  ["USER", "ADMIN"], // optional roles
+);
 ```
 
 **Parameters**:
+
 - `handler`: Function receiving `(req, user, context?)`
 - `requiredRoles`: Array of allowed roles (default: `["USER", "ADMIN"]`)
 
 **Returns**: Async function `(req, context?) => Promise<Response>`
 
 **Behavior**:
+
 - Calls `authGuard` to validate token
 - Returns 401 if unauthorized
 - Returns 500 on internal errors
 - Passes authenticated `user` and route `context` (including `params`) to handler
 
 ##### `withUserData(handler, requiredRoles?)`
+
 Simplified wrapper for data-fetching routes.
 
 ```typescript
 withUserData(
-  async (user) => { /* fetch and return data */ },
-  ["USER", "ADMIN"]
-)
+  async (user) => {
+    /* fetch and return data */
+  },
+  ["USER", "ADMIN"],
+);
 ```
 
 **Parameters**:
+
 - `handler`: Function receiving `user` and returning data
 - `requiredRoles`: Array of allowed roles (default: `["USER", "ADMIN"]`)
 
 **Returns**: Async function `() => Promise<NextResponse>`
 
 **Behavior**:
+
 - Validates auth via `authGuard`
 - Calls handler with user object
 - Returns JSON response with data or error
@@ -180,23 +200,28 @@ lib/actions/
 #### Actions
 
 ##### `toggleSaveGame(gameId: number)`
+
 Toggles save/unsave state for a game.
 
 **Process**:
+
 1. Reads `auth_token` from cookies
 2. Verifies token via `verifyToken`
 3. Calls `/api/games/${gameId}/save` POST endpoint with token in Cookie header
 4. Returns `{ success: boolean, ...responseData }`
 
 **Error Handling**:
+
 - Returns `{ success: false, error: "Not authenticated" }` if no token
 - Returns `{ success: false, error: "Invalid token" }` if token invalid
 - Catches exceptions, returns `{ success: false, error: "Failed to save game" }`
 
 ##### `toggleLikeReview(reviewId: number)`
+
 Toggles like/unlike state for a review.
 
 **Process**:
+
 1. Reads `auth_token` from cookies
 2. Verifies token via `verifyToken`
 3. Calls `/api/reviews/${reviewId}/like` POST endpoint with token in Cookie header
@@ -249,31 +274,32 @@ Toggles like/unlike state for a review.
 
 ## 4. Security Considerations
 
-| Aspect | Implementation |
-|--------|----------------|
+| Aspect           | Implementation                                      |
+| ---------------- | --------------------------------------------------- |
 | Password Storage | bcrypt with cost 12, stored in `supabase_id` column |
-| Token Storage | httpOnly, secure (prod), sameSite: strict cookie |
-| Token Algorithm | HS256 (symmetric) |
-| Token Expiry | 7 days |
-| Role Validation | Checked on every protected request |
-| Input Validation | Zod schemas on all server actions |
-| SQL Injection | Protected by Prisma ORM |
+| Token Storage    | httpOnly, secure (prod), sameSite: strict cookie    |
+| Token Algorithm  | HS256 (symmetric)                                   |
+| Token Expiry     | 7 days                                              |
+| Role Validation  | Checked on every protected request                  |
+| Input Validation | Zod schemas on all server actions                   |
+| SQL Injection    | Protected by Prisma ORM                             |
 
 ---
 
 ## 5. Environment Variables
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `JWT_SECRET` | Secret key for JWT signing | Yes (prod) |
+| Variable              | Description                              | Required                        |
+| --------------------- | ---------------------------------------- | ------------------------------- |
+| `JWT_SECRET`          | Secret key for JWT signing               | Yes (prod)                      |
 | `NEXT_PUBLIC_APP_URL` | Base URL for API calls in server actions | No (defaults to localhost:3000) |
-| `NODE_ENV` | Determines cookie secure flag | No |
+| `NODE_ENV`            | Determines cookie secure flag            | No                              |
 
 ---
 
 ## 6. Usage Examples
 
 ### Protecting an API Route
+
 ```typescript
 // app/api/profile/route.ts
 import { withUserData } from "@/lib/auth/routeHandler";
@@ -281,13 +307,14 @@ import { withUserData } from "@/lib/auth/routeHandler";
 export const GET = withUserData(async (user) => {
   const profile = await prisma.user.findUnique({
     where: { id: user.userId },
-    select: { name: true, email: true, handle: true }
+    select: { name: true, email: true, handle: true },
   });
   return profile;
 });
 ```
 
 ### Using Server Actions in Components
+
 ```typescript
 // Component
 import { toggleSaveGame } from "@/lib/actions/gameActions";
@@ -301,12 +328,16 @@ async function handleSave(gameId: number) {
 ```
 
 ### Custom Role Protection
+
 ```typescript
 // Admin-only route
-export const GET = withAuth(async (req, user) => {
-  // user.role === "ADMIN" guaranteed
-  return NextResponse.json({ adminData: "..." });
-}, ["ADMIN"]);
+export const GET = withAuth(
+  async (req, user) => {
+    // user.role === "ADMIN" guaranteed
+    return NextResponse.json({ adminData: "..." });
+  },
+  ["ADMIN"],
+);
 ```
 
 ---
@@ -350,9 +381,11 @@ app/api/
 ### 7.2 Authentication Routes (`app/api/auth/`)
 
 #### `POST /api/auth/login`
+
 Authenticates user and sets auth cookie.
 
 **Request Body**:
+
 ```json
 { "email": "user@example.com", "password": "password123" }
 ```
@@ -364,9 +397,11 @@ Authenticates user and sets auth cookie.
 ---
 
 #### `POST /api/auth/register`
+
 Registers a new user.
 
 **Request Body**:
+
 ```json
 {
   "email": "user@example.com",
@@ -385,6 +420,7 @@ Registers a new user.
 ---
 
 #### `GET /api/auth/logout`
+
 Clears auth cookie and redirects to home.
 
 **Response**: Redirect to `/`
@@ -392,6 +428,7 @@ Clears auth cookie and redirects to home.
 ---
 
 #### `GET /api/auth/google/initiate`
+
 Initiates Google OAuth flow (mock implementation).
 
 **Response**: Redirect to `/api/auth/google/callback?code=mock_code`
@@ -399,6 +436,7 @@ Initiates Google OAuth flow (mock implementation).
 ---
 
 #### `GET /api/auth/google/callback`
+
 Handles Google OAuth callback (mock implementation).
 
 **Process**: Mock Google user → Find/create user → Sign JWT → Set cookie → Redirect to `/`
@@ -410,11 +448,13 @@ Handles Google OAuth callback (mock implementation).
 ### 7.3 Dashboard Route (`app/api/dashboard/route.ts`)
 
 #### `GET /api/dashboard`
+
 Returns dashboard data based on user role. Protected via `withAuth`.
 
 **Auth**: Required (`USER` or `ADMIN`)
 
 **Response (USER)**:
+
 ```json
 {
   "role": "USER",
@@ -427,6 +467,7 @@ Returns dashboard data based on user role. Protected via `withAuth`.
 ```
 
 **Response (ADMIN)**:
+
 ```json
 {
   "role": "ADMIN",
@@ -443,6 +484,7 @@ Returns dashboard data based on user role. Protected via `withAuth`.
 ### 7.4 Library Routes (`app/api/library/`)
 
 #### `POST /api/library`
+
 Add a game to user's library. Protected via `withAuth`.
 
 **Request Body**: `{ "game_id": 123 }`
@@ -452,6 +494,7 @@ Add a game to user's library. Protected via `withAuth`.
 ---
 
 #### `DELETE /api/library`
+
 Remove a game from user's library. Protected via `withAuth`.
 
 **Request Body**: `{ "game_id": 123 }`
@@ -461,6 +504,7 @@ Remove a game from user's library. Protected via `withAuth`.
 ---
 
 #### `POST /api/library/add`
+
 Alternative endpoint to add game to library. Protected via `withAuth`.
 
 **Request Body**: `{ "gameId": 123 }`
@@ -474,9 +518,11 @@ Alternative endpoint to add game to library. Protected via `withAuth`.
 ### 7.5 Reviews Routes (`app/api/reviews/`)
 
 #### `GET /api/reviews`
+
 Fetch reviews feed with filtering, sorting, pagination. Public access.
 
 **Query Parameters**:
+
 - `limit`: 1-20 (default: 6)
 - `game`: string (search by game title)
 - `user`: number (filter by user ID)
@@ -489,9 +535,11 @@ Fetch reviews feed with filtering, sorting, pagination. Public access.
 ---
 
 #### `POST /api/reviews`
+
 Create a new review. Protected via `withAuth`.
 
 **Request Body**:
+
 ```json
 {
   "game_id": 123,
@@ -511,6 +559,7 @@ Create a new review. Protected via `withAuth`.
 ---
 
 #### `GET /api/reviews/[id]`
+
 Fetch single review by ID. Public access.
 
 **Response**: `{ review: Review }` with user, game, likes_count, liked_by_current_user
@@ -518,6 +567,7 @@ Fetch single review by ID. Public access.
 ---
 
 #### `PATCH /api/reviews/[id]`
+
 Update a review. Protected via `withAuth` (owner or ADMIN).
 
 **Request Body**: Partial of create schema (title, body, rating, recommended)
@@ -529,6 +579,7 @@ Update a review. Protected via `withAuth` (owner or ADMIN).
 ---
 
 #### `DELETE /api/reviews/[id]`
+
 Soft-delete (archive) a review. Protected via `withAuth` (owner or ADMIN).
 
 **Response**: `{ success: true }`
@@ -538,6 +589,7 @@ Soft-delete (archive) a review. Protected via `withAuth` (owner or ADMIN).
 ---
 
 #### `POST /api/reviews/[id]/like`
+
 Toggle like on a review. Protected via `withAuth`.
 
 **Response**: `{ success: true, liked: boolean, likes_count: number }`
@@ -553,6 +605,7 @@ All admin routes require authenticated ADMIN user (checked via `authGuard` + rol
 ---
 
 #### `POST /api/admin/make-admin`
+
 Promote a user to ADMIN.
 
 **Request Body**: `{ "targetId": 123 }`
@@ -566,6 +619,7 @@ Promote a user to ADMIN.
 ---
 
 #### `DELETE /api/admin/delete-user`
+
 Delete a user account.
 
 **Request Body**: `{ "targetId": 123 }`
@@ -579,6 +633,7 @@ Delete a user account.
 ---
 
 #### `DELETE /api/admin/delete-review`
+
 Archive (soft-delete) a review.
 
 **Request Body**: `{ "targetId": 123 }`
@@ -592,9 +647,11 @@ Archive (soft-delete) a review.
 ### 7.7 Games Routes (`app/api/games/`)
 
 #### `GET /api/games`
+
 List games with search, filter, pagination. Public access.
 
 **Query Parameters**:
+
 - `search`: string (title contains)
 - `genre`: string (filter by genre name)
 - `sort`: "title" | "release_date" | "rating"
@@ -603,6 +660,7 @@ List games with search, filter, pagination. Public access.
 - `limit`: 1-50 (default: 20)
 
 **Response**:
+
 ```json
 {
   "games": [{ "id": 1, "title": "...", "genres": ["Action"], ... }],
@@ -615,9 +673,11 @@ List games with search, filter, pagination. Public access.
 ---
 
 #### `POST /api/games`
+
 Create a new game. Admin only (checked via `authGuard` + role).
 
 **Request Body**:
+
 ```json
 {
   "title": "Game Title",
@@ -636,9 +696,11 @@ Create a new game. Admin only (checked via `authGuard` + role).
 ---
 
 #### `GET /api/games/[gameid]`
+
 Fetch game detail with reviews, genres, save/like status. Public (optional auth for user-specific fields).
 
 **Process**:
+
 1. Optional auth via `authGuard` (catches auth errors, continues as guest)
 2. Fetches cached base game data
 3. Checks if current user saved the game (non-cached)
@@ -646,6 +708,7 @@ Fetch game detail with reviews, genres, save/like status. Public (optional auth 
 5. Returns formatted response
 
 **Response**:
+
 ```json
 {
   "id": 1,
@@ -667,6 +730,7 @@ Fetch game detail with reviews, genres, save/like status. Public (optional auth 
 ---
 
 #### `DELETE /api/games/[gameid]`
+
 Delete a game. Admin only.
 
 **Response**: `{ success: true }`
@@ -676,6 +740,7 @@ Delete a game. Admin only.
 ---
 
 #### `POST /api/games/[gameid]/save`
+
 Toggle save/unsave game in user's library. Protected via `withAuth`.
 
 **Response**: `{ success: true, saved: boolean }`
@@ -687,6 +752,7 @@ Toggle save/unsave game in user's library. Protected via `withAuth`.
 ### 7.8 Genres Route (`app/api/genres/route.ts`)
 
 #### `GET /api/genres`
+
 List all genres. Public access.
 
 **Response**: `{ genres: Genre[] }`
@@ -694,6 +760,7 @@ List all genres. Public access.
 ---
 
 #### `POST /api/genres`
+
 Create a genre. Admin only.
 
 **Request Body**: `{ "name": "Action" }`
@@ -709,9 +776,11 @@ Create a genre. Admin only.
 ### 7.9 User Profile Route (`app/api/user/profile/route.ts`)
 
 #### `GET /api/user/profile`
+
 Fetch current user's profile with saved games. Protected via `withUserData`.
 
 **Response**:
+
 ```json
 {
   "user_id": 1,
@@ -732,9 +801,11 @@ Fetch current user's profile with saved games. Protected via `withUserData`.
 ---
 
 #### `PATCH /api/user/profile`
+
 Update user profile. Protected via `withAuth`.
 
 **Request Body** (all optional):
+
 ```json
 {
   "name": "New Name",
@@ -755,14 +826,14 @@ Update user profile. Protected via `withAuth`.
 
 ## 8. Caching Strategy
 
-| Route | Cache Type | Tags | Revalidate |
-|-------|------------|------|------------|
-| `/api/dashboard` (admin) | `unstable_cache` | `dashboard-admin` | 60s |
-| `/api/dashboard` (user) | `unstable_cache` | `dashboard-user` | 60s |
-| `/api/reviews` (GET) | `unstable_cache` | `reviews` | 60s |
-| `/api/games` (GET) | `unstable_cache` | `games` | 60s |
-| `/api/games/[id]` (GET) | `unstable_cache` | `game` | 300s |
-| `/api/genres` (GET) | None | - | - |
+| Route                    | Cache Type       | Tags              | Revalidate |
+| ------------------------ | ---------------- | ----------------- | ---------- |
+| `/api/dashboard` (admin) | `unstable_cache` | `dashboard-admin` | 60s        |
+| `/api/dashboard` (user)  | `unstable_cache` | `dashboard-user`  | 60s        |
+| `/api/reviews` (GET)     | `unstable_cache` | `reviews`         | 60s        |
+| `/api/games` (GET)       | `unstable_cache` | `games`           | 60s        |
+| `/api/games/[id]` (GET)  | `unstable_cache` | `game`            | 300s       |
+| `/api/genres` (GET)      | None             | -                 | -          |
 
 **Invalidation Pattern**: Mutations call `revalidateTag(tagName)` for relevant tags.
 
@@ -770,10 +841,10 @@ Update user profile. Protected via `withAuth`.
 
 ## 9. Authorization Patterns
 
-| Pattern | Implementation |
-|---------|----------------|
-| Public routes | No auth wrapper (e.g., `GET /api/reviews`, `GET /api/games`) |
-| User protected | `withAuth` / `withUserData` (checks token + USER/ADMIN roles) |
-| Owner or Admin | Manual check in handler: `user.role === "ADMIN" || resource.user_id === user.userId` |
-| Admin only | `authGuard()` + manual `user.role.name === "ADMIN"` check |
-| Optional auth | Try `authGuard`, catch error, proceed as guest (e.g., `GET /api/games/[id]`) |
+| Pattern        | Implementation                                                               |
+| -------------- | ---------------------------------------------------------------------------- | --- | --------------------------------- |
+| Public routes  | No auth wrapper (e.g., `GET /api/reviews`, `GET /api/games`)                 |
+| User protected | `withAuth` / `withUserData` (checks token + USER/ADMIN roles)                |
+| Owner or Admin | Manual check in handler: `user.role === "ADMIN"                              |     | resource.user_id === user.userId` |
+| Admin only     | `authGuard()` + manual `user.role.name === "ADMIN"` check                    |
+| Optional auth  | Try `authGuard`, catch error, proceed as guest (e.g., `GET /api/games/[id]`) |

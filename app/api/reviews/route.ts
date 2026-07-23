@@ -7,10 +7,12 @@ import { revalidateTag } from "next/cache";
 
 // Validation schema for the reviews feed
 const querySchema = z.object({
-  limit: z.coerce.number().min(1).max(20).optional().default(6),
+  limit: z.coerce.number().min(1).max(20).optional().default(5),
+  cursor: z.string().optional(), // Cursor-based pagination
   game: z.string().optional(),
   user: z.coerce.number().optional(),
   sort: z.enum(["recent", "rating", "popular"]).optional().default("recent"),
+  userId: z.coerce.number().optional(), // Current user ID for like status
 });
 
 // Validation schema for creating reviews
@@ -24,7 +26,7 @@ const createReviewSchema = z.object({
 
 // Cached query function - keyed by query parameters
 const getReviewsCached = unstable_cache(
-  async (limit: number, game: string | undefined, user: number | undefined, sort: string) => {
+  async (limit: number, cursor: string | undefined, game: string | undefined, user: number | undefined, sort: string, userId: number | undefined) => {
     const whereClause: any = { is_archived: false };
 
     if (game) {
@@ -55,7 +57,8 @@ const getReviewsCached = unstable_cache(
     const reviews = await prisma.review.findMany({
       where: whereClause,
       orderBy: orderByClause,
-      take: limit,
+      take: limit + 1, // Take one extra to check if there's more
+      cursor: cursor ? { id: Number(cursor) } : undefined,
       include: {
         user: {
           select: {
@@ -80,31 +83,60 @@ const getReviewsCached = unstable_cache(
       },
     });
 
-    return reviews.map((review) => ({
-      id: review.id,
-      title: review.title,
-      body: review.body,
-      rating: review.rating,
-      recommended: review.recommended,
-      created_at: review.created_at,
-      updated_at: review.updated_at,
-      is_archived: review.is_archived,
-      user: {
-        id: review.user.id,
-        name: review.user.name,
-        handle: review.user.handle,
-        profile_pic: review.user.profile_pic,
-        role: review.user.role.name,
-      },
-      game: {
-        id: review.game.id,
-        title: review.game.title,
-        cover_image: review.game.cover_image,
-        release_date: review.game.release_date,
-      },
-      likes_count: review._count.likes,
-      liked_by_current_user: false,
-    }));
+    // Check if there's a next page
+    let nextCursor: string | undefined = undefined;
+    if (reviews.length > limit) {
+      const nextReview = reviews.pop(); // Remove the extra item
+      if (nextReview) {
+        nextCursor = nextReview.id.toString();
+      }
+    }
+
+    // Fetch liked status for current user if authenticated
+    let likedReviewIds = new Set<number>();
+    if (userId) {
+      const likes = await prisma.like.findMany({
+        where: {
+          user_id: userId,
+          review_id: {
+            in: reviews.map(r => r.id),
+          },
+        },
+        select: {
+          review_id: true,
+        },
+      });
+      likedReviewIds = new Set(likes.map(l => l.review_id));
+    }
+
+    return {
+      reviews: reviews.map((review) => ({
+        id: review.id,
+        title: review.title,
+        body: review.body,
+        rating: review.rating,
+        recommended: review.recommended,
+        created_at: review.created_at,
+        updated_at: review.updated_at,
+        is_archived: review.is_archived,
+        user: {
+          id: review.user.id,
+          name: review.user.name,
+          handle: review.user.handle,
+          profile_pic: review.user.profile_pic,
+          role: review.user.role.name,
+        },
+        game: {
+          id: review.game.id,
+          title: review.game.title,
+          cover_image: review.game.cover_image,
+          release_date: review.game.release_date,
+        },
+        likes_count: review._count.likes,
+        liked_by_current_user: likedReviewIds.has(review.id),
+      })),
+      nextCursor,
+    };
   },
   ['reviews-feed'],
   { tags: ['reviews'], revalidate: 60 }
@@ -123,11 +155,11 @@ export async function GET(req: Request) {
       );
     }
 
-    const { limit, game, user, sort } = validation.data;
+    const { limit, cursor, game, user, sort, userId } = validation.data;
 
-    const formattedReviews = await getReviewsCached(limit, game, user, sort);
+    const result = await getReviewsCached(limit, cursor, game, user, sort, userId);
 
-    return NextResponse.json({ reviews: formattedReviews });
+    return NextResponse.json(result);
   } catch (error) {
     console.error("Error fetching reviews:", error);
     return NextResponse.json(
@@ -214,7 +246,7 @@ export const POST = withAuth(
       });
 
       // Invalidate reviews cache
-      revalidateTag('reviews', {});
+      revalidateTag('reviews');
 
       // Format the response
       const formattedReview = {

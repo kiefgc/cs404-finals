@@ -7,6 +7,7 @@ import { useState, FormEvent, useEffect } from 'react';
 interface Game {
   id: number;
   title: string;
+  cover_image?: string;
 }
 
 export default function JournalPage() {
@@ -18,13 +19,9 @@ export default function JournalPage() {
   const [description, setDescription] = useState('');
   const [content, setContent] = useState('');
   const [recommended, setRecommended] = useState(true);
-  const [gameId, setGameId] = useState<string | number>(''); 
+  const [gameId, setGameId] = useState<string | number>('');
   const [rating, setRating] = useState(5);
-  
-  // Dynamic user-submitted image field default
-  const defaultThumbnail = 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=1200&q=80';
-  const [thumbnail, setThumbnail] = useState(defaultThumbnail);
-  
+
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -83,7 +80,6 @@ export default function JournalPage() {
           recommended,
           game_id: Number(gameId),
           rating: Number(rating),
-          thumbnail: thumbnail.trim() || defaultThumbnail,
         }),
       });
 
@@ -163,20 +159,6 @@ export default function JournalPage() {
                   )}
                 </select>
               )}
-            </div>
-
-            {/* Custom Review Image URL */}
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">
-                Custom Review Image (URL)
-              </label>
-              <input
-                type="url"
-                placeholder="https://example.com/your-awesome-screenshot.jpg"
-                value={thumbnail}
-                onChange={(e) => setThumbnail(e.target.value)}
-                className="w-full bg-brand-surface-elevated border border-neutral-800 rounded-xl px-3 py-2.5 text-white placeholder-neutral-600 focus:outline-none focus:border-brand-primary-button text-sm"
-              />
             </div>
 
             {/* Entry Title */}
@@ -273,14 +255,17 @@ export default function JournalPage() {
         {/* Live Preview Column */}
         <div className="sticky top-12 h-full bg-brand-surface border border-neutral-900 rounded-3xl overflow-hidden shadow-2xl flex flex-col">
           <div className="relative h-56 bg-neutral-900">
-            <img
-              src={thumbnail || defaultThumbnail}
-              alt="Custom Review Cover"
-              className="w-full h-full object-cover opacity-70"
-              onError={(e) => {
-                e.currentTarget.src = defaultThumbnail;
-              }}
-            />
+            {selectedGame?.cover_image ? (
+              <img
+                src={selectedGame.cover_image}
+                alt={`${selectedGame.title} cover`}
+                className="w-full h-full object-cover opacity-70"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-gray-500">
+                No cover image available
+              </div>
+            )}
             <div className="absolute inset-0 bg-gradient-to-t from-brand-surface via-transparent to-transparent" />
             <div className="absolute bottom-4 left-4">
               <span className="text-xs font-bold uppercase tracking-widest text-brand-primary-light bg-brand-primary/80 border border-brand-primary-light/20 px-3 py-1 rounded-full text-white">

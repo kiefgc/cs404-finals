@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { cookies } from 'next/headers';
 import GameCard from '@/components/gamecard';
 import ReviewCard from '@/components/reviewcard';
+import FollowButton from '@/components/follow-button';
 import { prisma } from '@/lib/prisma';
 import { Game, Review } from '@/types';
 import { verifyToken } from '@/lib/auth/authUtils';
@@ -27,7 +28,7 @@ async function getCurrentUserId(): Promise<number | null> {
   }
 }
 
-async function getProfileData(userIdStr: string) {
+async function getProfileData(userIdStr: string, currentUserId: number | null) {
   const userId = parseInt(userIdStr, 10);
   if (isNaN(userId)) return null;
 
@@ -51,6 +52,21 @@ async function getProfileData(userIdStr: string) {
     });
 
     if (!user) return null;
+
+    // Fetch follower count and follow status from database directly
+    const [followerCount, isFollowing] = await Promise.all([
+      prisma.follow.count({ where: { following_id: userId } }),
+      currentUserId && currentUserId !== userId
+        ? prisma.follow.findUnique({
+            where: {
+              following_id_follower_id: {
+                following_id: userId,
+                follower_id: currentUserId,
+              },
+            },
+          })
+        : Promise.resolve(null),
+    ]);
 
     // 2. Fetch top 4 saved games
     const dbSavedGames = await prisma.savedGame.findMany({
@@ -89,7 +105,7 @@ async function getProfileData(userIdStr: string) {
 
     // 3. Fetch top 3 reviews
     const dbReviews = await prisma.review.findMany({
-      where: { 
+      where: {
         user_id: userId,
         is_archived: false,
       },
@@ -111,9 +127,6 @@ async function getProfileData(userIdStr: string) {
       date_created: review.created_at ? new Date(review.created_at).toISOString() : new Date().toISOString(),
     }));
 
-    // Safeguard the follower fallback metric depending on schema configuration
-    const followersCount = (user._count as any).followers ?? 0;
-
     return {
       profileUser: {
         user_id: user.id,
@@ -123,10 +136,11 @@ async function getProfileData(userIdStr: string) {
         profile_pic: user.profile_pic,
         gamesCount: user._count.saved_games,
         reviewsCount: user._count.reviews,
-        followersCount: followersCount,
+        followersCount: followerCount,
       },
       profileGames,
       profileReviews,
+      isFollowing: !!isFollowing,
     };
   } catch (error) {
     console.error("Error fetching profile database context:", error);
@@ -140,11 +154,11 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
   const currentUserId = await getCurrentUserId();
   const isOwnProfile = currentUserId === profileUserId;
 
-  const data = await getProfileData(userid);
+  const data = await getProfileData(userid, currentUserId);
 
   if (!data) notFound();
 
-  const { profileUser, profileGames, profileReviews } = data;
+  const { profileUser, profileGames, profileReviews, isFollowing } = data;
 
   // Dynamically grab initials safely
   const initials = profileUser.name
@@ -159,8 +173,8 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
     <div className="space-y-12 py-6">
       <section className="bg-brand-surface border border-white/5 rounded-3xl p-8 md:p-10 shadow-xl">
         <div className="space-y-6">
-            <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-              <div className="flex items-center gap-5">
+            <div className="relative flex flex-wrap items-start gap-8 md:gap-10">
+              <div className="flex items-center gap-5 flex-shrink-0">
                 {profileUser.profile_pic && profileUser.profile_pic.trim() !== "" ? (
                   <img
                     src={profileUser.profile_pic}
@@ -174,13 +188,13 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                     {initials}
                   </div>
                 )}
-                <div className="space-y-2">
-                  <h1 className="font-headline text-4xl text-white font-bold tracking-tight">{profileUser.name}</h1>
+                <div className="space-y-2 min-w-0">
+                  <h1 className="font-headline text-4xl text-white font-bold tracking-tight truncate">{profileUser.name}</h1>
                   <p className="text-sm text-gray-300 max-w-2xl leading-relaxed">{profileUser.role}</p>
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="absolute top-0 right-0 flex flex-wrap items-center gap-3">
                 {isOwnProfile && (
                   <Link
                     href={`/profile/${userid}/edit`}
@@ -188,6 +202,15 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
                   >
                     Edit Profile
                   </Link>
+                )}
+
+                {!isOwnProfile && currentUserId && (
+                  <FollowButton
+                    targetUserId={profileUser.user_id}
+                    initialFollowing={isFollowing}
+                    initialFollowersCount={profileUser.followersCount}
+                    currentUserId={currentUserId}
+                  />
                 )}
               </div>
             </div>

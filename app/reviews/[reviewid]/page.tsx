@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import ReviewActionButtons from '@/components/review-action-buttons';
+import { authGuard } from '@/lib/auth/authUtils';
 
 // Force dynamic rendering so modifications are fetched directly
 export const revalidate = 0;
@@ -74,12 +75,12 @@ async function getReviewDetails(reviewIdStr: string) {
   // Scale raw database rating safely if game object is valid
   let displayRating = '0.0';
   if (review.game) {
-    displayRating = review.game.rating_avg <= 5 
-      ? (review.game.rating_avg * 2).toFixed(1) 
+    displayRating = review.game.rating_avg <= 5
+      ? (review.game.rating_avg * 2).toFixed(1)
       : review.game.rating_avg.toFixed(1);
   }
 
-  return { 
+  return {
     review: {
       ...review,
       game: review.game ? {
@@ -92,7 +93,7 @@ async function getReviewDetails(reviewIdStr: string) {
         id: review.user?.id || 0,
         name: review.user?.name || 'Anonymous Critic',
       }
-    }, 
+    },
     relatedReviews: relatedReviews.map((rr) => ({
       ...rr,
       likes_count: rr._count?.likes || 0,
@@ -106,10 +107,30 @@ async function getReviewDetails(reviewIdStr: string) {
 
 export default async function ReviewDetailPage({ params }: PageProps) {
   const { reviewid } = await params;
+  const numericId = parseInt(reviewid, 10);
+
+  // Get current user session
+  const session = await authGuard(["USER", "ADMIN"]);
+  const userId = session?.userId;
+
   const data = await getReviewDetails(reviewid);
 
   if (!data) {
     notFound();
+  }
+
+  // Check if current user has liked this review
+  let likedByCurrentUser = false;
+  if (userId) {
+    const like = await prisma.like.findUnique({
+      where: {
+        user_id_review_id: {
+          user_id: userId,
+          review_id: numericId,
+        },
+      },
+    });
+    likedByCurrentUser = !!like;
   }
 
   const { review, relatedReviews } = data;
@@ -256,7 +277,8 @@ export default async function ReviewDetailPage({ params }: PageProps) {
 <ReviewActionButtons
             reviewId={review.id}
             initialLikes={review.likes_count}
-          />
+            initialLiked={likedByCurrentUser}
+/>
         </section>
 
         {/* 5. RELATED CRITIQUES SECTION */}

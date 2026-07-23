@@ -38,5 +38,5 @@ export interface Review {
   user_name?: string;
   date_created?: string;
   likes_count?: number;
-  image_url?: string;
+  game_cover_image?: string | null;
 }
