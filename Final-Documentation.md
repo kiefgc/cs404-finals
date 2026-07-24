@@ -362,12 +362,12 @@ app/api/
 ├── library/add/route.ts         # Add game to library (POST, protected)
 ├── reviews/
 │   ├── route.ts                 # Reviews feed & create (GET, POST)
-│   ├── [id]/route.ts            # Single review CRUD (GET, PATCH, DELETE)
+│   ├── [id]/route.ts            # Single review CRUD (GET, PATCH, DELETE) — **DELETE now soft-deletes (archives)**
 │   └── [id]/like/route.ts       # Toggle review like (POST, protected)
 ├── admin/
 │   ├── make-admin/route.ts      # Promote user to admin (POST, admin)
 │   ├── delete-user/route.ts     # Delete user (DELETE, admin)
-│   └── delete-review/route.ts   # Archive review (DELETE, admin)
+│   └── delete-review/route.ts   # Archive review (DELETE, admin) — **soft deletes via is_archived: true**
 ├── games/
 │   ├── route.ts                 # Games list & create (GET, POST)
 │   ├── [gameid]/route.ts        # Game detail & delete (GET, DELETE)
@@ -523,7 +523,7 @@ Fetch reviews feed with filtering, sorting, pagination. Public access.
 
 **Query Parameters**:
 
-- `limit`: 1-20 (default: 6)
+- `limit`: 1-20 (default: 6) — **changed from 5 to 6 to fit home page grid**
 - `game`: string (search by game title)
 - `user`: number (filter by user ID)
 - `sort`: "recent" | "rating" | "popular" (default: "recent")
@@ -554,7 +554,7 @@ Create a new review. Protected via `withAuth`.
 
 **Response**: `{ review: Review }` (201)
 
-**Cache Invalidation**: `reviews` tag
+**Cache Invalidation**: `revalidateTag('reviews', {})` — **Fixed: uses `revalidateTag` instead of `revalidatePath` for proper `unstable_cache` invalidation** (Fixed in commit 94a5610)
 
 ---
 
@@ -580,11 +580,13 @@ Update a review. Protected via `withAuth` (owner or ADMIN).
 
 #### `DELETE /api/reviews/[id]`
 
-Soft-delete (archive) a review. Protected via `withAuth` (owner or ADMIN).
+**Soft-delete (archive)** a review. Protected via `withAuth` (owner or ADMIN).
 
 **Response**: `{ success: true }`
 
-**Cache Invalidation**: `reviews` tag
+**Cache Invalidation**: `revalidateTag('reviews', {})`
+
+**Behavior**: Sets `is_archived: true` on the review (soft delete). Review remains in database but is excluded from public feeds (`is_archived: false` filter).
 
 ---
 
@@ -638,7 +640,7 @@ Archive (soft-delete) a review.
 
 **Request Body**: `{ "targetId": 123 }`
 
-**Note**: Uses hard delete (`prisma.review.delete`) despite "archive" comment
+**Note**: Uses soft delete (`prisma.review.update` with `is_archived: true`) — **changed from hard delete (`prisma.review.delete`) to preserve data integrity**
 
 **Cache Invalidation**: `dashboard-reviews`, `dashboard-admin`, `dashboard-user`
 
@@ -835,16 +837,89 @@ Update user profile. Protected via `withAuth`.
 | `/api/games/[id]` (GET)  | `unstable_cache` | `game`            | 300s       |
 | `/api/genres` (GET)      | None             | -                 | -          |
 
-**Invalidation Pattern**: Mutations call `revalidateTag(tagName)` for relevant tags.
+**Invalidation Pattern**: Mutations call `revalidateTag(tagName, {})` for relevant tags (2-argument form required by Next.js 15+).
 
 ---
 
-## 9. Authorization Patterns
+## 10. Frontend Components for Review Management
 
-| Pattern        | Implementation                                                               |
-| -------------- | ---------------------------------------------------------------------------- | --- | --------------------------------- |
-| Public routes  | No auth wrapper (e.g., `GET /api/reviews`, `GET /api/games`)                 |
-| User protected | `withAuth` / `withUserData` (checks token + USER/ADMIN roles)                |
-| Owner or Admin | Manual check in handler: `user.role === "ADMIN"                              |     | resource.user_id === user.userId` |
-| Admin only     | `authGuard()` + manual `user.role.name === "ADMIN"` check                    |
-| Optional auth  | Try `authGuard`, catch error, proceed as guest (e.g., `GET /api/games/[id]`) |
+### 10.1 New Components
+
+#### `components/delete-review-button.tsx`
+
+**Purpose**: Client component providing a confirmation modal for archiving (soft-deleting) user's own reviews.
+
+**Features**:
+- Two-step confirmation: "Archive" button → confirmation modal → "Confirm Archive"
+- Calls `DELETE /api/reviews/[id]` endpoint
+- Uses `router.refresh()` to invalidate RSC cache and re-render with updated data
+- Only rendered when `isOwner={true}` (prop from parent)
+
+**Props**:
+```typescript
+interface DeleteReviewButtonProps {
+  reviewId: number;
+  isOwner: boolean;
+  onDelete?: () => void; // Called after successful archive
+}
+```
+
+#### `components/review-action-buttons.tsx` (Updated)
+
+**Changes**:
+- Added `DeleteReviewButton` integration
+- Removed hardcoded `isOwner={true}` bug — now receives `isOwner` prop from parent
+- Uses `router.refresh()` internally instead of accepting `onDelete` from server components (fixes "Event handlers cannot be passed to Client Component props" error)
+
+#### `components/reviewcard.tsx` (Updated)
+
+**Changes**:
+- Made a Client Component (`'use client'`) to support interactivity
+- Added `currentUserId` prop for ownership comparison
+- Renders `DeleteReviewButton` with `isOwner={currentUserId === review.user_id}`
+- Uses `router.refresh()` for cache invalidation after archive
+
+---
+
+### 10.2 User-Facing Archive (Soft Delete) Flow
+
+**Home Page (`app/page.tsx`)**:
+- Calls `authGuard()` to get `currentUserId`
+- Fetches reviews with `user_id` field included
+- **Default limit changed from 5 to 6** to perfectly fit the 3-column grid layout
+- Passes `currentUserId` to `ReviewCard` for ownership checks
+
+**Review Detail Page (`app/reviews/[reviewid]/page.tsx`)**:
+- Uses `authGuard(["USER", "ADMIN"])` for session
+- Computes `isOwner = Number(review.user?.id) === userId` (type coercion for string/number comparison)
+- Passes `isOwner` and `currentUserId` to `ReviewActionButtons`
+
+**Profile Reviews Page (`app/profile/[userid]/reviews/page.tsx`)**:
+- Uses `authGuard()` for session
+- Passes `currentUserId` to `ReviewCard` for each user review
+
+**Reviews List Page (`components/reviews-page-client.tsx`)**:
+- Client component with local state for reviews
+- Integrates `DeleteReviewButton` with local state update + `router.refresh()`
+
+**Archive Process**:
+1. User clicks "Archive" button on their own review
+2. Confirmation modal appears
+3. User confirms → `DELETE /api/reviews/[id]` called
+4. Server sets `is_archived: true` on review
+5. Server calls `revalidateTag('reviews', {})`
+6. Client calls `router.refresh()` to re-fetch RSC data
+7. Review disappears from feed (filtered by `is_archived: false`)
+
+---
+
+### 10.3 Duplicate Deletion Logic Resolution
+
+**Two DELETE endpoints exist for different use cases**:
+
+| Endpoint | Auth Pattern | Cache Tags Invalidated | Use Case |
+|----------|--------------|------------------------|----------|
+| `DELETE /api/reviews/[id]` | `withAuth` (owner or ADMIN) | `reviews` | User self-archive; admin archive via review detail |
+| `DELETE /api/admin/delete-review` | `authGuard` + manual ADMIN check | `dashboard-reviews`, `dashboard-admin`, `dashboard-user` | Admin bulk/archive from admin dashboard |
+
+**Resolution**: Both endpoints now perform **soft delete** (`is_archived: true`). The duplicate logic is intentional — they serve different authorization patterns and invalidate different cache tags for different UI contexts.

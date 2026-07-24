@@ -269,11 +269,18 @@ _ Resolved all TypeScript/Zod API validation types and route handler schema mism
 - `games` / `games-[id]` - Game catalog and detail pages
 - `genres` - Genre list for game creation modal
 
+**Invalidation Pattern**: Mutations call `revalidateTag(tagName, {})` for relevant tags (2-argument form required by Next.js 15+).
+
 **Key Fixes Applied:**
 - **Doubled windows issue**: Server component controls active tab via URL params; client component receives `activeTab` prop and renders only that tab
 - **Genre FK constraint**: Seeded all 8 default genres (Action, Adventure, RPG, Strategy, Simulation, Sports, Horror, Puzzle) in `prisma/seed.ts`; client fetches genres dynamically from API
 - **Next.js 16 `revalidateTag`**: Fixed to use 2-argument form (`revalidateTag("tag", {})`)
 - **Login page Suspense**: Added Suspense boundary for `useSearchParams()` in `app/login/page.tsx` — split into `page.tsx` (server + Suspense) + `login-form.tsx` (client) to push client boundary to the leaves
+- **Cache invalidation fix**: Changed `POST /api/reviews` from `revalidatePath` to `revalidateTag('reviews', {})` for proper `unstable_cache` invalidation (commit 94a5610)
+- **Home page default limit**: Changed `/api/reviews` default limit from 5 to 6 to perfectly fit the 3-column home page grid (commit 94a5610)
+- **Admin review deletion**: Changed `DELETE /api/admin/delete-review` from hard delete to soft delete (`is_archived: true`) to preserve data integrity
+- **User-facing review archive**: Implemented `DELETE /api/reviews/[id]` with `DeleteReviewButton` client component for user self-archiving; buttons only visible to review owners
+- **ReviewCard client component**: Converted `ReviewCard` to client component with `router.refresh()` for instant UI updates after archiving
 
 ## 5. Sequential Engineering Execution Prompts
 
